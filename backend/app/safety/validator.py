@@ -20,8 +20,15 @@ class ActionValidator:
         definition = self.registry.get(recommendation.action_id)
         if not definition.enabled:
             raise ActionValidationError(f"action {recommendation.action_id.value} is not enabled")
+        if not isinstance(recommendation.parameters, dict):
+            raise ActionValidationError("action parameters must be a dictionary")
+
+        if recommendation.action_id == ActionId.RUN_SFC_SCAN:
+            if recommendation.parameters:
+                raise ActionValidationError(f"RUN_SFC_SCAN action does not accept parameters, got: {sorted(recommendation.parameters.keys())}")
+
         allowed = set(definition.parameter_schema.get("properties", {}))
-        unexpected = set(recommendation.parameters) - allowed
+        unexpected = set(recommendation.parameters.keys()) - allowed
         if unexpected:
             raise ActionValidationError(f"unsupported action parameters: {sorted(unexpected)}")
 
