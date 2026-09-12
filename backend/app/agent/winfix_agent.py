@@ -13,6 +13,7 @@ from app.diagnostics import (
     analyze_privacy,
     analyze_windows_optimization,
     check_system_health,
+    collect_battery_diagnostics,
     diagnose_performance,
     diagnose_windows_update,
     investigate_crashes,
@@ -104,6 +105,59 @@ class DeterministicHarness:
         causes: list[ProbableCause] = []
         findings: list[Finding] = []
         recommendations: list[RecommendedAction] = []
+
+        battery_ev = next(
+            (item for item in evidence if item.data.get("kind") == "BATTERY_DIAGNOSIS" or item.category == EvidenceCategory.BATTERY),
+            None,
+        )
+        if battery_ev:
+            b_data = battery_ev.data
+            b_status = b_data.get("status", "unknown")
+            b_present = b_data.get("battery_present", False)
+            b_warnings = b_data.get("warnings", [])
+            b_limitations = b_data.get("limitations", [])
+
+            if not b_present:
+                findings.append(
+                    Finding(
+                        title="No battery detected",
+                        description=battery_ev.description,
+                        evidence_ids=[battery_ev.id],
+                    )
+                )
+            else:
+                findings.append(
+                    Finding(
+                        title="Battery diagnostic snapshot collected",
+                        description=battery_ev.description,
+                        evidence_ids=[battery_ev.id],
+                    )
+                )
+                if b_status in ("critical", "warning"):
+                    causes.append(
+                        ProbableCause(
+                            title=f"Battery Alert ({b_status.title()})",
+                            explanation=f"Battery evidence: {'; '.join(b_warnings) if b_warnings else battery_ev.description}",
+                            evidence_ids=[battery_ev.id],
+                            confidence=0.85 if b_status == "critical" else 0.70,
+                        )
+                    )
+                for w in b_warnings:
+                    findings.append(
+                        Finding(
+                            title="Battery Observation",
+                            description=w,
+                            evidence_ids=[battery_ev.id],
+                        )
+                    )
+                for lim in b_limitations:
+                    findings.append(
+                        Finding(
+                            title="Battery Metric Limitation",
+                            description=lim,
+                            evidence_ids=[battery_ev.id],
+                        )
+                    )
 
         resource_hog = next((item for item in evidence if item.data.get("kind") == "RESOURCE_HOG_ANALYSIS"), None)
         if resource_hog:
@@ -218,11 +272,11 @@ class DeterministicHarness:
                         evidence_ids=[issue.id],
                     ))
 
-        # Fallback safeguard: If warnings exist but no action was matched yet, provide standard safe remediation steps
+        # Fallback safeguard: If non-battery warnings exist but no action was matched yet, provide standard safe remediation steps
         if not recommendations:
-            warnings = [e for e in evidence if e.severity in (Severity.WARNING, Severity.CRITICAL)]
-            if warnings:
-                target_ev = warnings[0]
+            non_battery_warnings = [e for e in evidence if e.severity in (Severity.WARNING, Severity.CRITICAL) and e.category != EvidenceCategory.BATTERY]
+            if non_battery_warnings:
+                target_ev = non_battery_warnings[0]
                 recommendations.append(RecommendedAction(
                     action_id=ActionId.CLEAR_TEMP_FILES,
                     reason=f"Cleaning temporary files will free system resources and resolve background file junk ({target_ev.title}).",
@@ -317,9 +371,13 @@ class WinFixAgent:
 
     async def investigate(self, user_problem: str, categories: list[str]) -> tuple[list[Evidence], DiagnosisResult]:
         requested = set(categories or ["performance"])
-        prob_lower = user_problem.lower()
-        if any(term in prob_lower for term in ["update", "wuauserv", "bits", "cryptsvc", "patch", "kb"]):
+        problem_lower = user_problem.lower()
+        if any(term in problem_lower for term in ["update", "wuauserv", "bits", "cryptsvc", "patch", "kb"]):
             requested.add("windows_update")
+        battery_keywords = {"battery", "drain", "charge", "power source", "ac power", "plugged in", "battery life"}
+        if any(kw in problem_lower for kw in battery_keywords):
+            requested.add("battery")
+
 
         if isinstance(self.harness, PiAgentHarness) and requested == {"performance"}:
             try:
@@ -350,4 +408,7 @@ class WinFixAgent:
             evidence.extend(analyze_windows_optimization())
         if "privacy" in requested:
             evidence.extend(analyze_privacy())
+        if "battery" in requested:
+            evidence.append(collect_battery_diagnostics())
         return evidence
+

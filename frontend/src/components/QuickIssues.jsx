@@ -2,6 +2,7 @@ import React from "react";
 
 const QUICK_ISSUES = [
   { id: "slow", icon: "🐌", label: "PC is very slow" },
+  { id: "battery", icon: "🔋", label: "Check battery health" },
   { id: "update", icon: "🔄", label: "Windows Update issue" },
   { id: "startup", icon: "⚡", label: "Slow startup" },
   { id: "storage", icon: "💾", label: "Low disk space" },

@@ -99,6 +99,37 @@ function EvidenceRow({ item }) {
               </div>
             )}
 
+            {(item.kind === "BATTERY_DIAGNOSIS" || data.kind === "BATTERY_DIAGNOSIS" || item.category === "battery") && data && (
+              <div className="battery-details-box" style={{ marginTop: "10px", padding: "10px", background: "rgba(0,0,0,0.2)", borderRadius: "6px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "0.85rem" }}>
+                  <div><strong>Power Source:</strong> {data.power_source ? data.power_source.toUpperCase() : "Unknown"}</div>
+                  <div><strong>Charge Level:</strong> {data.charge_percent != null ? `${data.charge_percent}%` : "Unavailable"}</div>
+                  <div><strong>Status:</strong> {data.is_charging === true ? "⚡ Charging" : data.is_charging === false ? "Discharging" : "Unknown"}</div>
+                  <div><strong>Battery Saver:</strong> {data.battery_saver_enabled === true ? "Enabled" : data.battery_saver_enabled === false ? "Disabled" : "Unavailable"}</div>
+                  {data.battery_health?.health_percent != null && (
+                    <div><strong>Battery Health:</strong> {data.battery_health.health_percent}%</div>
+                  )}
+                  {data.power_plan && (
+                    <div><strong>Power Plan:</strong> {data.power_plan}</div>
+                  )}
+                </div>
+                {data.warnings && data.warnings.length > 0 && (
+                  <div style={{ marginTop: "8px", fontSize: "0.82rem", color: "#f59e0b" }}>
+                    <strong>Warnings:</strong>
+                    <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
+                      {data.warnings.map((w, idx) => (
+                        <li key={idx}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {data.limitations && data.limitations.length > 0 && (
+                  <div style={{ marginTop: "6px", fontSize: "0.8rem", opacity: 0.7 }}>
+                    <strong>Limitations:</strong> {data.limitations.join("; ")}
+                  </div>
+                )}
+              </div>
+            )}
             {topHogs.length > 0 && (
               <div className="resource-hog-box">
                 <div className="resource-hog-table">
