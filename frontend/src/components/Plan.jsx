@@ -1,19 +1,31 @@
-const labels = {
-  clear_temp_files: "Clear approved temporary files",
-  disable_startup_app: "Disable a startup application",
-  remove_optional_app: "Remove an optional application",
-  apply_privacy_profile: "Apply a privacy profile",
-  run_sfc_scan: "Run System File Checker",
-  run_dism_health_check: "Run DISM health check",
-};
+import React from "react";
 
-export function Plan({ actions, onApprove, busy }) {
-  return <section className="panel"><h2>Remediation plan</h2>
-    {actions.length === 0 ? <p className="muted">No action is recommended from this snapshot. WinFix will not make a speculative change.</p> : <div className="plan-list">
-      {actions.map((action) => <article className="plan-item" key={action.action_id}>
-        <div><span className="risk">Medium risk</span><h3>{labels[action.action_id] ?? action.action_id}</h3><p>{action.reason}</p></div>
-        <button disabled={busy} onClick={() => onApprove(action.action_id)}>Approve</button>
-      </article>)}
-    </div>}
-  </section>;
+export default function Plan({ plan, onApprove }) {
+  return (
+    <section className="card plan-card">
+      <div className="card-head">
+        <h3>📋 Recommended repair plan</h3>
+        <span className="card-count">{plan.length} steps</span>
+      </div>
+      <ol className="plan-list">
+        {plan.map((p, i) => (
+          <li key={i} className="plan-step">
+            <span className="plan-num">{i + 1}</span>
+            <span className="plan-text">{p.text}</span>
+            <span className="plan-badges">
+              {p.safe && <span className="badge safe">✓ Safe</span>}
+              {p.admin && <span className="badge admin">⚠ Admin</span>}
+              {p.restart && <span className="badge restart">🔄 Restart</span>}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <div className="plan-actions">
+        <p className="plan-note">WinFix will not modify your system until you approve the repair.</p>
+        <button type="button" className="btn btn-primary btn-lg" onClick={onApprove}>
+          Approve &amp; Repair
+        </button>
+      </div>
+    </section>
+  );
 }
