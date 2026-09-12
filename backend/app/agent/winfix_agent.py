@@ -106,6 +106,35 @@ class DeterministicHarness:
         findings: list[Finding] = []
         recommendations: list[RecommendedAction] = []
 
+        resource_hog = next((item for item in evidence if item.data.get("kind") == "RESOURCE_HOG_ANALYSIS"), None)
+        if resource_hog:
+            top_resource_consumers = resource_hog.data.get("top_resource_consumers", [])
+            high_or_med = [app for app in top_resource_consumers if app.get("impact") in ("HIGH", "MEDIUM")]
+            if high_or_med:
+                top_app = high_or_med[0]
+                causes.append(
+                    ProbableCause(
+                        title=f"High resource consumption by {top_app['name']}",
+                        explanation=(
+                            f"Application '{top_app['name']}' ({top_app['process_count']} process{'es' if top_app['process_count'] != 1 else ''}) "
+                            f"is a strong observed contributor to system load, consuming {top_app['raw_cpu_percent']}% CPU "
+                            f"and {top_app['memory_mb']} MB RAM (Impact Score: {top_app['impact_score']} [{top_app['impact']}])."
+                        ),
+                        evidence_ids=[resource_hog.id],
+                        confidence=0.85 if top_app["impact"] == "HIGH" else 0.70,
+                    )
+                )
+                findings.append(
+                    Finding(
+                        title="Observed resource consumer bottleneck",
+                        description=(
+                            f"Identified {top_app['name']} as a major resource consumer "
+                            f"({top_app['raw_cpu_percent']}% CPU, {top_app['memory_mb']} MB RAM)."
+                        ),
+                        evidence_ids=[resource_hog.id],
+                    )
+                )
+
         memory = by_title.get("Memory utilization")
         if memory and memory.data.get("percent", 0) >= 85:
             causes.append(ProbableCause(title="High memory pressure", explanation="Available memory is low relative to installed memory.", evidence_ids=[memory.id], confidence=0.85))

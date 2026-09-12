@@ -13,7 +13,7 @@ class PiFallbackTest(unittest.IsolatedAsyncioTestCase):
         agent = WinFixAgent()
         evidence, diagnosis = await agent.investigate("My PC is slow", ["performance"])
 
-        self.assertEqual(len(evidence), 6)
+        self.assertEqual(len(evidence), 7)
         self.assertTrue(diagnosis.summary)
         self.assertGreaterEqual(diagnosis.overall_confidence, 0)
         self.assertLessEqual(diagnosis.overall_confidence, 1)
