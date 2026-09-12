@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { winfixApi } from "./api/client.js";
 import "./styles.css";
 
@@ -75,6 +75,28 @@ export default function App() {
   const [error, setError] = useState(null);
   const [prefs, setPrefs] = useState(() => ({ provider: localStorage.getItem("winfix-provider") || "OpenAI", apiKey: localStorage.getItem("winfix-api-key") || "", model: localStorage.getItem("winfix-model") || "GPT-4o", gpu: localStorage.getItem("winfix-gpu") || "NVIDIA GeForce RTX 4060", gpuEnabled: localStorage.getItem("winfix-gpu-enabled") !== "false" }));
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=' || e.key === '0')) {
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+        if (activeTag !== 'input' && activeTag !== 'textarea') {
+          e.preventDefault();
+        }
+      }
+    };
+    const handleWheel = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   const isWorking = phase === PHASE.DIAGNOSING || phase === PHASE.REPAIRING;
   const diagnosis = normalizeDiagnosis(session?.diagnosis);
