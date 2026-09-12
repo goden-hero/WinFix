@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath, UnsupportedOperation
 import platform
 from typing import Any, Callable
 
@@ -59,7 +59,7 @@ def default_service_checker(service_name: str) -> dict[str, Any]:
                 startup_type = "disabled"
             elif start_val in (0, 1):
                 startup_type = "boot_system"
-    except (PermissionError, OSError) as err:
+    except (PermissionError, OSError, ImportError) as err:
         error = f"Registry query error for {service_name}: {err}"
 
     # 2. Query running status via psutil
@@ -144,7 +144,7 @@ def default_registry_reader() -> tuple[bool | None, list[str], str | None]:
             if not error_message:
                 error_message = f"Permission error reading PendingFileRenameOperations: {err}"
 
-    except Exception as err:
+    except (ImportError, Exception) as err:
         error_message = f"Unexpected error checking reboot registry keys: {err}"
         return None, [], error_message
 
@@ -155,26 +155,31 @@ def default_registry_reader() -> tuple[bool | None, list[str], str | None]:
     return pending, reboot_reasons, error_message
 
 
-def default_directory_checker(target_path: Path) -> tuple[bool, bool, int, int, str | None]:
+def default_directory_checker(target_path: Any) -> tuple[bool, bool, int, int, str | None]:
     """Check existence, accessibility, total bytes, and file count of directory without modifying files."""
     try:
-        resolved = target_path.resolve()
-        if not resolved.exists():
+        try:
+            resolved = target_path.resolve()
+        except (AttributeError, UnsupportedOperation, NotImplementedError):
+            resolved = target_path
+
+        path_str = str(resolved)
+        if not os.path.exists(path_str):
             return False, False, 0, 0, None
 
-        if not resolved.is_dir():
+        if not os.path.isdir(path_str):
             return True, False, 0, 0, f"Path '{target_path}' exists but is not a directory."
 
         total_bytes = 0
         file_count = 0
         accessible = True
 
-        for root, dirs, files in os.walk(resolved, followlinks=False):
+        for root, dirs, files in os.walk(path_str, followlinks=False):
             dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(root, d))]
             for name in files:
-                file_path = Path(root) / name
+                file_path = os.path.join(root, name)
                 try:
-                    stat = file_path.stat(follow_symlinks=False)
+                    stat = os.stat(file_path, follow_symlinks=False)
                     total_bytes += stat.st_size
                     file_count += 1
                 except (OSError, PermissionError):
@@ -299,13 +304,17 @@ def diagnose_windows_update(
     )
 
     # 3. Download Cache Directory Diagnostics
-    if system_root:
-        target_root = system_root
+    if not is_windows:
+        cache_path = PureWindowsPath(r"C:\Windows\SoftwareDistribution\Download")
+        exists, accessible, bytes_size, file_count, cache_err = False, False, 0, 0, None
     else:
-        target_root = Path(os.environ.get("SystemRoot", r"C:\Windows"))
-
-    cache_path = target_root / "SoftwareDistribution" / "Download"
-    exists, accessible, bytes_size, file_count, cache_err = dir_fn(cache_path)
+        try:
+            target_root = system_root if system_root else Path(os.environ.get("SystemRoot", r"C:\Windows"))
+            cache_path = target_root / "SoftwareDistribution" / "Download"
+            exists, accessible, bytes_size, file_count, cache_err = dir_fn(cache_path)
+        except (UnsupportedOperation, NotImplementedError, Exception):
+            cache_path = PureWindowsPath(r"C:\Windows\SoftwareDistribution\Download")
+            exists, accessible, bytes_size, file_count, cache_err = dir_fn(cache_path)
 
     if not is_windows:
         cache_desc = "Windows Update cache inspection is not applicable on non-Windows operating systems."

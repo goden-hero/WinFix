@@ -77,16 +77,16 @@ export default function ApprovalDialog({ open, plan = [], onCancel, onConfirm })
               : meta.target;
 
             return (
-              <li key={i} style={{ padding: "12px", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", background: "rgba(0,0,0,0.2)" }}>
+              <li key={i}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                  <strong style={{ fontSize: "15px", color: "#e8edf6" }}>
+                  <strong style={{ fontSize: "var(--font-md)", color: "#e8edf6" }}>
                     {i + 1}. {meta.name}
                   </strong>
-                  <span className="risk severity warning" style={{ fontSize: "10px", padding: "2px 6px" }}>
+                  <span className="severity-badge warning">
                     {meta.risk} RISK
                   </span>
                 </div>
-                <div style={{ fontSize: "12px", color: "#a0aec0", display: "flex", flexDirection: "column", gap: "4px" }}>
+                <div style={{ fontSize: "var(--font-sm)", color: "#a0aec0", display: "flex", flexDirection: "column", gap: "4px" }}>
                   <div><strong>Target:</strong> {targetDetails}</div>
                   <div><strong>What will change:</strong> {item.reason || meta.change}</div>
                   <div><strong>Rollback Info:</strong> {meta.rollback}</div>
@@ -96,7 +96,7 @@ export default function ApprovalDialog({ open, plan = [], onCancel, onConfirm })
           })}
         </ul>
 
-        <div className="modal-actions" style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "20px" }}>
+        <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onCancel}>
             Cancel
           </button>

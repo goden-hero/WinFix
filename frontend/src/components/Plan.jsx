@@ -62,18 +62,18 @@ export function Plan({ actions = [], plan = [], approvedActions = {}, onApprove,
               <li key={actionId + i} className={`plan-step plan-item ${isUnsupported ? "unsupported-step" : ""}`}>
                 <span className="plan-num">{i + 1}</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "4px" }}>
-                    <span className="risk severity warning">MEDIUM RISK</span>
-                    <span className="badge safe" style={{ fontSize: "10px" }}>Target: {scope}</span>
+                  <div className="plan-badges">
+                    <span className="severity-badge warning">MEDIUM RISK</span>
+                    <span className="badge safe">Target: {scope}</span>
                     {isUnsupported && (
-                      <span className="badge danger" style={{ fontSize: "10px", background: "rgba(255,100,100,0.2)", color: "#ff8888" }}>
+                      <span className="badge danger">
                         Not available in MVP
                       </span>
                     )}
                   </div>
-                  <span className="plan-text" style={{ display: "block", fontWeight: 700, margin: "4px 0" }}>{title}</span>
-                  <p className="muted" style={{ fontSize: "13px", margin: "4px 0" }}>{action.reason || action.description}</p>
-                  <div style={{ display: "flex", gap: "14px", fontSize: "11px", color: "var(--text-dim)", marginTop: "4px" }}>
+                  <span className="plan-text">{title}</span>
+                  <p className="plan-reason">{action.reason || action.description}</p>
+                  <div className="plan-meta">
                     <span>Target Scope: {scope}</span>
                     <span>Rollback: {rollback}</span>
                   </div>
@@ -81,7 +81,7 @@ export function Plan({ actions = [], plan = [], approvedActions = {}, onApprove,
 
                 {isUnsupported ? (
                   <button type="button" className="btn btn-disabled" disabled style={{ opacity: 0.5, cursor: "not-allowed" }}>
-                    Coming soon — execution disabled for safety
+                    Coming soon
                   </button>
                 ) : (
                   <button
@@ -99,8 +99,8 @@ export function Plan({ actions = [], plan = [], approvedActions = {}, onApprove,
         </ol>
       )}
 
-      <div className="plan-actions" style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid #26313c" }}>
-        <p className="plan-note muted" style={{ fontSize: "12px" }}>
+      <div className="plan-actions">
+        <p className="plan-note">
           WinFix will not modify your system until you explicitly approve each repair step.
         </p>
       </div>
