@@ -27,6 +27,44 @@ class AgentHarness(Protocol):
     async def diagnose(self, problem: str, evidence: list[Evidence]) -> DiagnosisResult: ...
 
 
+class GroqHarness:
+    """Direct Groq API adapter using OpenAI-compatible chat completions."""
+
+    def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
+        self.api_key = api_key or os.getenv("GROQ_API_KEY", "")
+        self.model = model or os.getenv("WINFIX_MODEL", "llama-3.3-70b-versatile")
+        self.base_url = "https://api.groq.com/openai/v1"
+
+    async def diagnose(self, problem: str, evidence: list[Evidence]) -> DiagnosisResult:
+        if not self.api_key:
+            raise ValueError("GROQ_API_KEY environment variable is missing.")
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {"user_problem": problem, "evidence": [item.model_dump(mode="json") for item in evidence]}
+                    ),
+                },
+            ],
+        }
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
+            response.raise_for_status()
+
+        content = response.json()["choices"][0]["message"]["content"]
+        result = DiagnosisResult.model_validate_json(content)
+        return result.model_copy(update={"generated_by": f"groq:{self.model}"})
+
+
 class OllamaQwenHarness:
     """Small direct Ollama adapter until the Pi runtime adapter is installed."""
 
@@ -49,13 +87,14 @@ class OllamaQwenHarness:
                 },
             ],
         }
-        # A missing local Ollama daemon must not make the UI appear stuck.
         async with httpx.AsyncClient(timeout=3.0) as client:
             response = await client.post(f"{self.base_url}/api/chat", json=payload)
             response.raise_for_status()
         content = response.json()["message"]["content"]
         result = DiagnosisResult.model_validate_json(content)
         return result.model_copy(update={"generated_by": f"ollama:{self.model}"})
+
+
 
 
 class DeterministicHarness:
@@ -102,7 +141,14 @@ class WinFixAgent:
 
     def __init__(self, harness: AgentHarness | None = None) -> None:
         runtime = os.getenv("WINFIX_AGENT_RUNTIME", "pi").lower()
-        self.harness = harness or (OllamaQwenHarness() if runtime == "direct_ollama" else PiAgentHarness())
+        if harness:
+            self.harness = harness
+        elif runtime == "groq":
+            self.harness = GroqHarness()
+        elif runtime == "direct_ollama":
+            self.harness = OllamaQwenHarness()
+        else:
+            self.harness = PiAgentHarness()
         self.fallback = DeterministicHarness()
 
     async def investigate(self, user_problem: str, categories: list[str]) -> tuple[list[Evidence], DiagnosisResult]:
