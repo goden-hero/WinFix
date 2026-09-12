@@ -1,14 +1,39 @@
 import React from "react";
 
-export default function RepairProgress({ steps }) {
+export default function RepairProgress({ steps, status, busy }) {
+  const isExecuting = (busy && status === "approved") || status === "executing";
+  const isVerifying = busy && status === "verifying";
+
+  let title = "Repair Plan Approved";
+  let subtitle = "Your approved repair plan is ready. Click below to execute.";
+  let tag = "⏳ Waiting for your confirmation";
+  let dotClass = "pulse-dot";
+
+  if (isExecuting) {
+    title = "Repairing your system…";
+    subtitle = "Applying approved repair plan";
+    tag = "🔧 Executing repair plan";
+    dotClass = "pulse-dot orange";
+  } else if (isVerifying) {
+    title = "Verifying system state…";
+    subtitle = "Checking independent system verification metrics";
+    tag = "🔍 Verifying system";
+    dotClass = "pulse-dot orange";
+  } else if (status === "verifying") {
+    title = "Remediation Applied";
+    subtitle = "Repair completed. Click below to verify system state.";
+    tag = "✓ Ready to verify";
+    dotClass = "pulse-dot";
+  }
+
   return (
     <section className="card progress-card repair">
       <div className="progress-head">
         <div className="progress-title-row">
-          <span className="pulse-dot orange" aria-hidden />
-          <h2>Repairing your system…</h2>
+          <span className={dotClass} aria-hidden />
+          <h2>{title}</h2>
         </div>
-        <p className="progress-problem">Applying approved repair plan</p>
+        <p className="progress-problem">{subtitle}</p>
       </div>
       <ol className="step-list">
         {steps.map((s, i) => (
@@ -28,7 +53,7 @@ export default function RepairProgress({ steps }) {
         )}
       </ol>
       <div className="progress-foot">
-        <span className="agent-tag">🔧 Executing repair plan</span>
+        <span className="agent-tag">{tag}</span>
       </div>
     </section>
   );

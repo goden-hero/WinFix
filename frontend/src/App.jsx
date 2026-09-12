@@ -177,18 +177,18 @@ export default function App() {
   const [showApproval, setShowApproval] =
     useState(false);
   const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
 
-  const isWorking =
-    phase === PHASE.DIAGNOSING ||
-    phase === PHASE.REPAIRING;
+  const isWorking = busy || phase === PHASE.DIAGNOSING;
 
   const handleDiagnose = useCallback(
     async (text) => {
       const value = (text ?? problem).trim();
 
-      if (!value || isWorking) return;
+      if (!value || busy || phase === PHASE.DIAGNOSING) return;
 
       setError(null);
+      setBusy(true);
       setProblem(value);
       setSession(null);
       setDiagSteps([]);
@@ -251,14 +251,16 @@ export default function App() {
           err.message || "Diagnosis failed"
         );
         setPhase(PHASE.IDLE);
+      } finally {
+        setBusy(false);
       }
     },
-    [problem, isWorking]
+    [problem, busy, phase]
   );
 
   const handleApprove = useCallback(
     async () => {
-      if (!session) return;
+      if (!session || busy) return;
 
       const actions =
         session.diagnosis
@@ -271,6 +273,7 @@ export default function App() {
 
       setShowApproval(false);
       setError(null);
+      setBusy(true);
       setPhase(PHASE.REPAIRING);
 
       try {
@@ -293,17 +296,19 @@ export default function App() {
           err.message || "Approval failed"
         );
         setPhase(PHASE.DIAGNOSIS);
+      } finally {
+        setBusy(false);
       }
     },
-    [session]
+    [session, busy]
   );
 
   const handleExecute = useCallback(
     async () => {
-      if (!session || isWorking) return;
+      if (!session || busy) return;
 
       setError(null);
-      setPhase(PHASE.REPAIRING);
+      setBusy(true);
 
       try {
         const updated =
@@ -316,18 +321,19 @@ export default function App() {
         setError(
           err.message || "Repair failed"
         );
-        setPhase(PHASE.DIAGNOSIS);
+      } finally {
+        setBusy(false);
       }
     },
-    [session, isWorking]
+    [session, busy]
   );
 
   const handleVerify = useCallback(
     async () => {
-      if (!session || isWorking) return;
+      if (!session || busy) return;
 
       setError(null);
-      setPhase(PHASE.REPAIRING);
+      setBusy(true);
 
       try {
         const updated =
@@ -344,9 +350,11 @@ export default function App() {
         setError(
           err.message || "Verification failed"
         );
+      } finally {
+        setBusy(false);
       }
     },
-    [session, isWorking]
+    [session, busy]
   );
 
   const handleReset = useCallback(() => {
@@ -569,8 +577,10 @@ export default function App() {
           <>
             <RepairProgress
               steps={getRepairSteps(
-                repairStatus
+                busy && repairStatus === "approved" ? "executing" : repairStatus
               )}
+              status={repairStatus}
+              busy={busy}
             />
 
             <section className="card plan-card">
@@ -587,9 +597,10 @@ export default function App() {
                     <button
                       type="button"
                       className="btn btn-primary btn-lg"
+                      disabled={busy}
                       onClick={handleExecute}
                     >
-                      🔧 Execute Approved Repair
+                      {busy ? "⚙ Executing Repair..." : "🔧 Execute Approved Repair"}
                     </button>
                   </>
                 )}
@@ -613,9 +624,10 @@ export default function App() {
                     <button
                       type="button"
                       className="btn btn-primary btn-lg"
+                      disabled={busy}
                       onClick={handleVerify}
                     >
-                      ✓ Verify System
+                      {busy ? "🔍 Verifying System..." : "✓ Verify System"}
                     </button>
                   </>
                 )}
