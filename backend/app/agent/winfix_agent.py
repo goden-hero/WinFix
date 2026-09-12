@@ -171,7 +171,8 @@ class DeterministicHarness:
                         explanation=(
                             f"Application '{top_app['name']}' ({top_app['process_count']} process{'es' if top_app['process_count'] != 1 else ''}) "
                             f"is a strong observed contributor to system load, consuming {top_app['raw_cpu_percent']}% CPU "
-                            f"and {top_app['memory_mb']} MB RAM (Impact Score: {top_app['impact_score']} [{top_app['impact']}])."
+                            f"and {top_app['memory_mb']} MB RAM (Impact Score: {top_app['impact_score']} [{top_app['impact']}]). "
+                            "User attention is recommended: review unnecessary tabs, extensions, or background workloads."
                         ),
                         evidence_ids=[resource_hog.id],
                         confidence=0.85 if top_app["impact"] == "HIGH" else 0.70,
@@ -195,8 +196,8 @@ class DeterministicHarness:
 
         disk = by_title.get("System drive capacity")
         if disk and disk.data.get("percent", 0) >= 90:
-            causes.append(ProbableCause(title="Low system drive capacity", explanation="A nearly full system drive can slow updates and temporary-file workloads.", evidence_ids=[disk.id], confidence=0.8))
-            recommendations.append(RecommendedAction(action_id=ActionId.CLEAR_TEMP_FILES, reason="Temporary storage can be reclaimed through an approved, bounded cleanup.", evidence_ids=[disk.id]))
+            causes.append(ProbableCause(title="Low system drive capacity", explanation="A nearly full system drive can slow updates and temporary-file workloads. User attention is recommended to review storage usage.", evidence_ids=[disk.id], confidence=0.8))
+            findings.append(Finding(title="System drive storage pressure", description=f"System drive capacity is at {disk.data.get('percent', 0)}%. User attention is recommended to review storage usage.", evidence_ids=[disk.id]))
 
         startup = by_title.get("Startup applications") or next((item for item in evidence if "startup" in item.title.lower()), None)
         if startup:
@@ -258,7 +259,7 @@ class DeterministicHarness:
                         reason=f"Running a DISM health check can verify and service core Windows components ({issue.title}).",
                         evidence_ids=[issue.id],
                     ))
-            elif "file" in title_lower or "integrity" in title_lower or "system" in title_lower or issue.category == EvidenceCategory.CRASH:
+            elif ("file" in title_lower or "integrity" in title_lower or "system" in title_lower or issue.category == EvidenceCategory.CRASH) and not any(k in title_lower for k in ("drive", "capacity", "storage", "resource", "cpu", "memory", "ram", "temp")):
                 causes.append(ProbableCause(
                     title=f"System Integrity Warning: {issue.title}",
                     explanation=f"System evidence reported an anomaly in {issue.title}: {issue.description}",
@@ -272,16 +273,7 @@ class DeterministicHarness:
                         evidence_ids=[issue.id],
                     ))
 
-        # Fallback safeguard: If non-battery warnings exist but no action was matched yet, provide standard safe remediation steps
-        if not recommendations:
-            non_battery_warnings = [e for e in evidence if e.severity in (Severity.WARNING, Severity.CRITICAL) and e.category != EvidenceCategory.BATTERY]
-            if non_battery_warnings:
-                target_ev = non_battery_warnings[0]
-                recommendations.append(RecommendedAction(
-                    action_id=ActionId.CLEAR_TEMP_FILES,
-                    reason=f"Cleaning temporary files will free system resources and resolve background file junk ({target_ev.title}).",
-                    evidence_ids=[target_ev.id],
-                ))
+
 
         wu_services = by_title.get("Windows Update core services")
         if wu_services:
@@ -396,7 +388,7 @@ class WinFixAgent:
     @staticmethod
     def _collect_evidence(requested: set[str]) -> list[Evidence]:
         evidence: list[Evidence] = []
-        if "performance" in requested:
+        if any(c in requested for c in ("performance", "resource_hog", "storage", "startup")):
             evidence.extend(diagnose_performance())
         if "system_health" in requested:
             evidence.extend(check_system_health())

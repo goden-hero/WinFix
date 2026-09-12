@@ -13,7 +13,7 @@ export default function VerificationResult({ verification, sessionId, onRestart 
   if (allVerified) {
     cardClass = "success";
     icon = "✓";
-    title = "Fix successful";
+    title = "Remediation Action Verified";
   } else if (hasElevation) {
     cardClass = "warning";
     icon = "🔒";
@@ -39,7 +39,9 @@ export default function VerificationResult({ verification, sessionId, onRestart 
         </p>
       )}
       {allVerified && (
-        <p className="verify-message">All approved remediation actions completed and passed independent verification.</p>
+        <p className="verify-message">
+          Independent verification confirmed the specific remediation action executed successfully.
+        </p>
       )}
       {sessionId && <p className="verify-session">Session {sessionId}</p>}
       <button type="button" className="btn btn-primary btn-lg" onClick={onRestart}>

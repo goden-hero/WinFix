@@ -42,9 +42,12 @@ export function Plan({ actions = [], plan = [], approvedActions = {}, onApprove,
       </div>
 
       {items.length === 0 ? (
-        <p className="muted" style={{ padding: "16px 0" }}>
-          No action is recommended from this snapshot. WinFix will not make a speculative change.
-        </p>
+        <div style={{ padding: "16px 0" }}>
+          <h4 style={{ color: "#ffd166", margin: "0 0 6px 0" }}>User Attention Recommended</h4>
+          <p className="muted" style={{ margin: 0 }}>
+            WinFix identified the likely source of system load, but no automatic repair was applied. User attention is recommended (e.g. review unnecessary browser tabs, extensions, or background workloads).
+          </p>
+        </div>
       ) : (
         <ol className="plan-list">
           {items.map((action, i) => {
