@@ -12,9 +12,8 @@ async function request(path, options = {}) {
 
 export const winfixApi = {
   createSession: (user_problem) => request("/sessions", { method: "POST", body: JSON.stringify({ user_problem }) }),
-  diagnose: (sessionId) => request(`/sessions/${sessionId}/diagnose`, { method: "POST", body: JSON.stringify({ categories: ["performance"] }) }),
+  diagnose: (sessionId, categories) => request(`/sessions/${sessionId}/diagnose`, { method: "POST", body: JSON.stringify({ categories: categories || ["performance", "windows_update"] }) }),
   approve: (sessionId, decisions) => request(`/sessions/${sessionId}/approve`, { method: "POST", body: JSON.stringify({ decisions }) }),
   executeSession: (sessionId) => request(`/sessions/${sessionId}/execute`, { method: "POST" }),
   verifySession: (sessionId) => request(`/sessions/${sessionId}/verify`, { method: "POST" }),
 };
-

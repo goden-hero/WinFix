@@ -14,6 +14,7 @@ from app.diagnostics import (
     analyze_windows_optimization,
     check_system_health,
     diagnose_performance,
+    diagnose_windows_update,
     investigate_crashes,
 )
 from app.schemas.actions import ActionId, RecommendedAction
@@ -95,8 +96,6 @@ class OllamaQwenHarness:
         return result.model_copy(update={"generated_by": f"ollama:{self.model}"})
 
 
-
-
 class DeterministicHarness:
     """Reliable local fallback and demo baseline when an LLM is unavailable."""
 
@@ -150,6 +149,62 @@ class DeterministicHarness:
                 evidence_ids=[temp.id],
             ))
 
+        wu_services = by_title.get("Windows Update core services")
+        if wu_services:
+            if wu_services.data.get("overall_service_health") in ("problem_detected", "warning"):
+                causes.append(ProbableCause(
+                    title="Windows Update service issue",
+                    explanation=f"{wu_services.description} Administrator privileges may be required for future service remediation. No system changes were made during diagnostics.",
+                    evidence_ids=[wu_services.id],
+                    confidence=0.85,
+                ))
+                findings.append(Finding(
+                    title="Windows Update service status",
+                    description=wu_services.description,
+                    evidence_ids=[wu_services.id],
+                ))
+            else:
+                findings.append(Finding(
+                    title="Windows Update services healthy",
+                    description=wu_services.description,
+                    evidence_ids=[wu_services.id],
+                ))
+
+        wu_reboot = by_title.get("Windows Update pending reboot status")
+        if wu_reboot and wu_reboot.data.get("pending_reboot") is True:
+            causes.append(ProbableCause(
+                title="Windows Update pending reboot required",
+                explanation=wu_reboot.description,
+                evidence_ids=[wu_reboot.id],
+                confidence=0.8,
+            ))
+            findings.append(Finding(
+                title="Pending system reboot detected",
+                description=wu_reboot.description,
+                evidence_ids=[wu_reboot.id],
+            ))
+        elif wu_reboot and wu_reboot.data.get("status") == "UNKNOWN":
+            findings.append(Finding(
+                title="Pending reboot status unknown",
+                description=wu_reboot.description,
+                evidence_ids=[wu_reboot.id],
+            ))
+
+        wu_cache = by_title.get("Windows Update download cache")
+        if wu_cache:
+            if wu_cache.data.get("cache_accessible") is False or wu_cache.data.get("error_message"):
+                findings.append(Finding(
+                    title="Windows Update cache inspection issue",
+                    description=wu_cache.description,
+                    evidence_ids=[wu_cache.id],
+                ))
+            else:
+                findings.append(Finding(
+                    title="Windows Update cache metadata collected",
+                    description=wu_cache.description,
+                    evidence_ids=[wu_cache.id],
+                ))
+
         if not causes:
             causes.append(ProbableCause(title="No single bottleneck identified", explanation="The current snapshot does not establish a definitive root cause. Further observation may be needed.", evidence_ids=[item.id for item in evidence[:4]], confidence=0.45))
         if not findings:
@@ -181,6 +236,10 @@ class WinFixAgent:
 
     async def investigate(self, user_problem: str, categories: list[str]) -> tuple[list[Evidence], DiagnosisResult]:
         requested = set(categories or ["performance"])
+        prob_lower = user_problem.lower()
+        if any(term in prob_lower for term in ["update", "wuauserv", "bits", "cryptsvc", "patch", "kb"]):
+            requested.add("windows_update")
+
         if isinstance(self.harness, PiAgentHarness) and requested == {"performance"}:
             try:
                 return await self.harness.investigate_performance(user_problem)
@@ -191,7 +250,7 @@ class WinFixAgent:
         evidence = self._collect_evidence(requested)
         try:
             diagnosis = await self.harness.diagnose(user_problem, evidence)
-        except (httpx.HTTPError, KeyError, TypeError, ValidationError, ValueError):
+        except (httpx.HTTPError, KeyError, TypeError, ValidationError, ValueError, AttributeError):
             diagnosis = await self.fallback.diagnose(user_problem, evidence)
         return evidence, diagnosis
 
@@ -202,6 +261,8 @@ class WinFixAgent:
             evidence.extend(diagnose_performance())
         if "system_health" in requested:
             evidence.extend(check_system_health())
+        if "windows_update" in requested:
+            evidence.extend(diagnose_windows_update())
         if "crash" in requested:
             evidence.extend(investigate_crashes())
         if "optimization" in requested:
