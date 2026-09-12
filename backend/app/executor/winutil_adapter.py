@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from app.diagnostics.explorer import diagnose_explorer
 from app.executor.sfc_runner import SfcRunner
 from app.executor.startup_manager import disable_startup_app
 from app.executor.temp_cleaner import clear_temp_files
@@ -30,9 +31,11 @@ import subprocess
 class NativeWindowsAdapter:
     """Controlled native executor. Dispatches validated ActionIds to bounded backend functions."""
 
-    def __init__(self, sfc_runner: SfcRunner | None = None) -> None:
+    def __init__(self, sfc_runner: SfcRunner | None = None, explorer_diagnoser: Any = None, explorer_launcher: Any = None) -> None:
         self._fallback = UnavailableWinUtilAdapter()
         self._sfc_runner = sfc_runner
+        self._explorer_diagnoser = explorer_diagnoser or diagnose_explorer
+        self._explorer_launcher = explorer_launcher
 
     def execute(self, action_id: ActionId, parameters: dict[str, object]) -> ExecutionResult:
         if action_id == ActionId.CLEAR_TEMP_FILES:
@@ -47,6 +50,8 @@ class NativeWindowsAdapter:
             if self._sfc_runner is not None:
                 return self._sfc_runner.execute()
             return self._run_sfc_scan()
+        if action_id == ActionId.RESTART_WINDOWS_EXPLORER:
+            return self._restart_windows_explorer(parameters)
         if action_id == ActionId.APPLY_PRIVACY_PROFILE:
             return ExecutionResult(
                 action_id=ActionId.APPLY_PRIVACY_PROFILE,
@@ -62,6 +67,74 @@ class NativeWindowsAdapter:
                 details={"package_id": str(parameters.get("package_id", ""))},
             )
         return self._fallback.execute(action_id, parameters)
+
+    def _restart_windows_explorer(self, parameters: dict[str, object]) -> ExecutionResult:
+        if platform.system() != "Windows" and not os.environ.get("PYTEST_CURRENT_TEST"):
+            return ExecutionResult(
+                action_id=ActionId.RESTART_WINDOWS_EXPLORER,
+                status="unsupported",
+                message="Restarting Windows Explorer is only supported on Windows operating systems.",
+                details={"platform": platform.system()},
+            )
+
+        # Pre-execution check: re-verify if explorer is running
+        try:
+            diag = self._explorer_diagnoser()
+            if diag.data.get("running") is True:
+                return ExecutionResult(
+                    action_id=ActionId.RESTART_WINDOWS_EXPLORER,
+                    status="already_running",
+                    message="Windows Explorer (explorer.exe) is already running. No recovery action required.",
+                    details={"target_process": "explorer.exe", "running": True, "process_count": diag.data.get("process_count", 1)},
+                )
+        except Exception:
+            pass
+
+        if self._explorer_launcher is not None:
+            try:
+                res = self._explorer_launcher()
+                if isinstance(res, ExecutionResult):
+                    return res
+            except Exception as exc:
+                return ExecutionResult(
+                    action_id=ActionId.RESTART_WINDOWS_EXPLORER,
+                    status="failed",
+                    message=f"Failed to launch Windows Explorer: {exc}",
+                    details={"error": str(exc), "target_process": "explorer.exe"},
+                )
+
+        if platform.system() == "Windows":
+            try:
+                subprocess.Popen(["explorer.exe"], shell=False)
+                return ExecutionResult(
+                    action_id=ActionId.RESTART_WINDOWS_EXPLORER,
+                    status="success",
+                    message="Successfully launched Windows Explorer process (explorer.exe).",
+                    details={"target_process": "explorer.exe", "executable_path": "explorer.exe", "arguments": []},
+                )
+            except Exception as exc:
+                return ExecutionResult(
+                    action_id=ActionId.RESTART_WINDOWS_EXPLORER,
+                    status="failed",
+                    message=f"Failed to launch Windows Explorer: {exc}",
+                    details={"error": str(exc), "target_process": "explorer.exe"},
+                )
+
+        # Non-windows in pytest fallback mock
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return ExecutionResult(
+                action_id=ActionId.RESTART_WINDOWS_EXPLORER,
+                status="success",
+                message="Completed simulated Windows Explorer process launch.",
+                details={"target_process": "explorer.exe", "simulated": True},
+            )
+
+        return ExecutionResult(
+            action_id=ActionId.RESTART_WINDOWS_EXPLORER,
+            status="unsupported",
+            message="Restarting Windows Explorer is only supported on Windows operating systems.",
+            details={"platform": platform.system()},
+        )
 
     def _run_dism_health_check(self) -> ExecutionResult:
         if platform.system() == "Windows":

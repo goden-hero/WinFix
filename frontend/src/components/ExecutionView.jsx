@@ -27,8 +27,11 @@ export function ExecutionView({ results, onExecute, onVerify, status, busy }) {
       <div className="execution-list">
         {results.map((res, idx) => {
           const isStartup = res.action_id === "disable_startup_app";
+          const isExplorer = res.action_id === "restart_windows_explorer";
           const title = isStartup
             ? `DISABLE_STARTUP_APP (${res.details?.name ?? "Startup App"})`
+            : isExplorer
+            ? "Restart Windows Explorer"
             : res.action_id === "clear_temp_files"
             ? "Clear Approved Temporary Files"
             : res.action_id;
@@ -40,7 +43,25 @@ export function ExecutionView({ results, onExecute, onVerify, status, busy }) {
                 <h3>{title}</h3>
               </div>
               <p className="execution-message">{res.message}</p>
-              {res.details && !isStartup && (
+              {res.details && isExplorer && (
+                <div className="execution-metrics">
+                  <div className="metric-chip">
+                    <small>Target Executable</small>
+                    <strong>{res.details.target_process ?? "explorer.exe"}</strong>
+                  </div>
+                  <div className="metric-chip">
+                    <small>Execution Status</small>
+                    <strong>{res.status.toUpperCase()}</strong>
+                  </div>
+                  {res.details.running !== undefined && (
+                    <div className="metric-chip">
+                      <small>Process Running</small>
+                      <strong>{res.details.running ? "Yes" : "No"}</strong>
+                    </div>
+                  )}
+                </div>
+              )}
+              {res.details && !isStartup && !isExplorer && (
                 <div className="execution-metrics">
                   <div className="metric-chip">
                     <small>Files Cleaned</small>

@@ -19,6 +19,7 @@ class ActionId(str, Enum):
     APPLY_PRIVACY_PROFILE = "apply_privacy_profile"
     RUN_SFC_SCAN = "run_sfc_scan"
     RUN_DISM_HEALTH_CHECK = "run_dism_health_check"
+    RESTART_WINDOWS_EXPLORER = "restart_windows_explorer"
 
     @classmethod
     def _missing_(cls, value: object) -> ActionId | None:

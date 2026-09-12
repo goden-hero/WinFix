@@ -7,6 +7,7 @@ const labels = {
   apply_privacy_profile: "Apply a privacy profile (Disabled in MVP)",
   run_sfc_scan: "Run System File Checker verification",
   run_dism_health_check: "Run DISM component store health check",
+  restart_windows_explorer: "Restart Windows Explorer (explorer.exe)",
 };
 
 const scopeMap = {
@@ -14,6 +15,7 @@ const scopeMap = {
   clear_temp_files: "Temporary file storage",
   run_sfc_scan: "System file integrity (verify-only)",
   run_dism_health_check: "Component store health check (read-only)",
+  restart_windows_explorer: "Windows Explorer shell process (explorer.exe)",
 };
 
 const rollbackMap = {
@@ -21,6 +23,7 @@ const rollbackMap = {
   clear_temp_files: "N/A (Temporary storage cleanup)",
   run_sfc_scan: "N/A (Read-only verification)",
   run_dism_health_check: "N/A (Read-only health check)",
+  restart_windows_explorer: "No separate rollback; verify Explorer process state after execution.",
 };
 
 export function Plan({ actions = [], plan = [], onApprove, busy }) {

@@ -14,6 +14,7 @@ from app.diagnostics import (
     analyze_windows_optimization,
     check_system_health,
     collect_battery_diagnostics,
+    diagnose_explorer,
     diagnose_performance,
     diagnose_windows_update,
     investigate_crashes,
@@ -105,6 +106,58 @@ class DeterministicHarness:
         causes: list[ProbableCause] = []
         findings: list[Finding] = []
         recommendations: list[RecommendedAction] = []
+
+        explorer_ev = next(
+            (item for item in evidence if item.data.get("kind") == "EXPLORER_DIAGNOSIS" or item.category == EvidenceCategory.EXPLORER),
+            None,
+        )
+        if explorer_ev:
+            e_data = explorer_ev.data
+            e_running = e_data.get("running", False)
+            e_status = e_data.get("status", "unknown")
+            proc_count = e_data.get("process_count", 0)
+            proc_ids = e_data.get("process_ids", [])
+            e_limitations = e_data.get("limitations", [])
+
+            if e_status == "unsupported" or any("unsupported" in str(lim).lower() for lim in e_limitations):
+                findings.append(
+                    Finding(
+                        title="Windows Explorer diagnostic unsupported",
+                        description=explorer_ev.description,
+                        evidence_ids=[explorer_ev.id],
+                    )
+                )
+            elif not e_running:
+                causes.append(
+                    ProbableCause(
+                        title="Windows Explorer is not running",
+                        explanation="The Windows Explorer process (explorer.exe) is not running. The taskbar, Start menu, and desktop shell may be unavailable.",
+                        evidence_ids=[explorer_ev.id],
+                        confidence=0.90,
+                    )
+                )
+                findings.append(
+                    Finding(
+                        title="Windows Explorer process absent",
+                        description="explorer.exe process was not detected in system diagnostics.",
+                        evidence_ids=[explorer_ev.id],
+                    )
+                )
+                recommendations.append(
+                    RecommendedAction(
+                        action_id=ActionId.RESTART_WINDOWS_EXPLORER,
+                        reason="Windows Explorer (explorer.exe) is not running. Restarting explorer.exe restores the taskbar, Start menu, and desktop shell.",
+                        evidence_ids=[explorer_ev.id],
+                    )
+                )
+            else:
+                findings.append(
+                    Finding(
+                        title="Windows Explorer process is running",
+                        description=f"explorer.exe is active ({proc_count} process(es), PIDs: {proc_ids}). Process presence does not guarantee every UI shell component is responsive.",
+                        evidence_ids=[explorer_ev.id],
+                    )
+                )
 
         battery_ev = next(
             (item for item in evidence if item.data.get("kind") == "BATTERY_DIAGNOSIS" or item.category == EvidenceCategory.BATTERY),
@@ -377,7 +430,9 @@ class WinFixAgent:
         battery_keywords = {"battery", "drain", "charge", "power source", "ac power", "plugged in", "battery life"}
         if any(kw in problem_lower for kw in battery_keywords):
             requested.add("battery")
-
+        explorer_keywords = {"taskbar", "desktop icons", "explorer", "windows shell", "start menu", "desktop disappeared", "shell"}
+        if any(kw in problem_lower for kw in explorer_keywords):
+            requested.add("explorer")
 
         if isinstance(self.harness, PiAgentHarness) and requested == {"performance"}:
             try:
@@ -410,5 +465,7 @@ class WinFixAgent:
             evidence.extend(analyze_privacy())
         if "battery" in requested:
             evidence.append(collect_battery_diagnostics())
+        if "explorer" in requested:
+            evidence.append(diagnose_explorer())
         return evidence
 

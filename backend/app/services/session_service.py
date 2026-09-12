@@ -15,6 +15,7 @@ from app.storage.database import SessionStore
 
 
 from app.diagnostics.startup import get_startup_apps
+from app.diagnostics.explorer import diagnose_explorer
 
 
 class SessionNotFoundError(KeyError):
@@ -229,6 +230,40 @@ class SessionService:
                             )
                         ],
                         summary="Independent verification confirmed System File Checker (SFC) scan completed successfully.",
+                    )
+                )
+            elif result.action_id == ActionId.RESTART_WINDOWS_EXPLORER:
+                fresh_explorer = diagnose_explorer()
+                is_running = fresh_explorer.data.get("running", False)
+                proc_count = fresh_explorer.data.get("process_count", 0)
+                status_str = fresh_explorer.data.get("status", "unknown")
+
+                if status_str == "unsupported":
+                    v_status = VerificationStatus.SKIPPED
+                    summary_msg = "Verification is unavailable on non-Windows platforms."
+                elif is_running:
+                    v_status = VerificationStatus.VERIFIED
+                    summary_msg = "Independent verification confirmed Windows Explorer (explorer.exe) is running. The taskbar and desktop shell may have recovered."
+                else:
+                    v_status = VerificationStatus.FAILED
+                    summary_msg = "Verification failed: Windows Explorer (explorer.exe) is still not running after execution attempt."
+
+                verification_results.append(
+                    VerificationResult(
+                        action_id=result.action_id,
+                        status=v_status,
+                        before={"explorer_running": False},
+                        after={"explorer_running": is_running, "process_count": proc_count},
+                        metrics=[
+                            VerificationMetric(
+                                name="Explorer Process (explorer.exe)",
+                                before=0,
+                                after=proc_count,
+                                unit="processes",
+                                improved=is_running,
+                            )
+                        ],
+                        summary=summary_msg,
                     )
                 )
             elif result.action_id in (ActionId.APPLY_PRIVACY_PROFILE, ActionId.REMOVE_OPTIONAL_APP):

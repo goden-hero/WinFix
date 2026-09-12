@@ -28,6 +28,10 @@ class ActionValidator:
             if recommendation.parameters:
                 raise ActionValidationError(f"RUN_SFC_SCAN action does not accept parameters, got: {sorted(recommendation.parameters.keys())}")
 
+        if recommendation.action_id == ActionId.RESTART_WINDOWS_EXPLORER:
+            if recommendation.parameters:
+                raise ActionValidationError(f"RESTART_WINDOWS_EXPLORER action accepts no parameters, got: {sorted(recommendation.parameters.keys())}")
+
         allowed = set(definition.parameter_schema.get("properties", {}))
         unexpected = set(recommendation.parameters.keys()) - allowed
         if unexpected:

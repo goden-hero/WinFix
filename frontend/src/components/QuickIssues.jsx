@@ -8,6 +8,7 @@ const QUICK_ISSUES = [
   { id: "storage", icon: "💾", label: "Low disk space" },
   { id: "apps", icon: "📦", label: "Apps not responding" },
   { id: "system", icon: "🛠️", label: "System errors" },
+  { id: "explorer", icon: "💻", label: "Check Windows Explorer / taskbar" },
 ];
 
 export default function QuickIssues({ onSelect }) {

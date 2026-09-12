@@ -130,6 +130,34 @@ function EvidenceRow({ item }) {
                 )}
               </div>
             )}
+
+            {(item.kind === "EXPLORER_DIAGNOSIS" || data.kind === "EXPLORER_DIAGNOSIS" || item.category === "explorer") && data && (
+              <div className="explorer-details-box" style={{ marginTop: "10px", padding: "10px", background: "rgba(0,0,0,0.2)", borderRadius: "6px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "0.85rem" }}>
+                  <div><strong>Target Process:</strong> {data.process_name || "explorer.exe"}</div>
+                  <div><strong>Process State:</strong> {data.running ? "🟢 Running" : "🔴 Not Running"}</div>
+                  <div><strong>Process Count:</strong> {data.process_count ?? 0}</div>
+                  <div><strong>PIDs:</strong> {data.process_ids && data.process_ids.length > 0 ? data.process_ids.join(", ") : "None"}</div>
+                  <div><strong>Taskbar Impact:</strong> {data.taskbar_impact || "unknown"}</div>
+                  <div><strong>Desktop Impact:</strong> {data.desktop_impact || "unknown"}</div>
+                </div>
+                {data.warnings && data.warnings.length > 0 && (
+                  <div style={{ marginTop: "8px", fontSize: "0.82rem", color: "#f59e0b" }}>
+                    <strong>Warnings:</strong>
+                    <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
+                      {data.warnings.map((w, idx) => (
+                        <li key={idx}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {data.limitations && data.limitations.length > 0 && (
+                  <div style={{ marginTop: "6px", fontSize: "0.8rem", opacity: 0.7 }}>
+                    <strong>Limitations:</strong> {data.limitations.join("; ")}
+                  </div>
+                )}
+              </div>
+            )}
             {topHogs.length > 0 && (
               <div className="resource-hog-box">
                 <div className="resource-hog-table">

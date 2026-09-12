@@ -1,5 +1,6 @@
 from app.diagnostics.battery import collect_battery_diagnostics
 from app.diagnostics.crashes import investigate_crashes
+from app.diagnostics.explorer import diagnose_explorer
 from app.diagnostics.optimization import analyze_windows_optimization
 from app.diagnostics.performance import diagnose_performance
 from app.diagnostics.privacy import analyze_privacy
@@ -13,6 +14,7 @@ __all__ = [
     "check_system_health",
     "collect_battery_diagnostics",
     "detect_resource_hogs",
+    "diagnose_explorer",
     "diagnose_performance",
     "diagnose_windows_update",
     "investigate_crashes",

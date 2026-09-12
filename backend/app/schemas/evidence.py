@@ -16,6 +16,7 @@ class EvidenceCategory(str, Enum):
     PRIVACY = "privacy"
     WINDOWS_UPDATE = "windows_update"
     BATTERY = "battery"
+    EXPLORER = "explorer"
 
 
 class Severity(str, Enum):
