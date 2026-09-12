@@ -18,7 +18,7 @@ from app.diagnostics import (
 )
 from app.schemas.actions import ActionId, RecommendedAction
 from app.schemas.diagnosis import DiagnosisResult, Finding, ProbableCause
-from app.schemas.evidence import Evidence
+from app.schemas.evidence import Evidence, EvidenceCategory, Severity
 
 
 class AgentHarness(Protocol):
@@ -139,33 +139,38 @@ class DeterministicHarness:
         if memory and memory.data.get("percent", 0) >= 85:
             causes.append(ProbableCause(title="High memory pressure", explanation="Available memory is low relative to installed memory.", evidence_ids=[memory.id], confidence=0.85))
             findings.append(Finding(title="Memory use is elevated", description=memory.description, evidence_ids=[memory.id]))
+
         disk = by_title.get("System drive capacity")
         if disk and disk.data.get("percent", 0) >= 90:
             causes.append(ProbableCause(title="Low system drive capacity", explanation="A nearly full system drive can slow updates and temporary-file workloads.", evidence_ids=[disk.id], confidence=0.8))
             recommendations.append(RecommendedAction(action_id=ActionId.CLEAR_TEMP_FILES, reason="Temporary storage can be reclaimed through an approved, bounded cleanup.", evidence_ids=[disk.id]))
-        startup = by_title.get("Startup applications")
+
+        startup = by_title.get("Startup applications") or next((item for item in evidence if "startup" in item.title.lower()), None)
         if startup:
             entries = startup.data.get("entries", [])
+            enabled_entries = [e for e in entries if e.get("enabled")]
             demo_active = [e for e in entries if e.get("is_demo") and e.get("enabled")]
-            if demo_active:
-                target_entry = demo_active[0]
+            target_entry = demo_active[0] if demo_active else (enabled_entries[0] if enabled_entries else None)
+            
+            if target_entry:
                 causes.append(ProbableCause(
                     title="Startup Overhead",
-                    explanation=f"Application '{target_entry['name']}' starts automatically with Windows and contributes to startup overhead.",
+                    explanation=f"Application '{target_entry['name']}' starts automatically with Windows and contributes to background overhead.",
                     evidence_ids=[startup.id],
-                    confidence=0.85,
+                    confidence=0.85 if demo_active else 0.75,
                 ))
                 recommendations.append(RecommendedAction(
                     action_id=ActionId.DISABLE_STARTUP_APP,
-                    reason=f"Application '{target_entry['name']}' starts automatically with Windows and may contribute to startup overhead.",
+                    reason=f"Application '{target_entry['name']}' starts automatically with Windows and may contribute to sign-in delay and background resource load.",
                     evidence_ids=[startup.id],
                     parameters={"startup_entry_id": target_entry["id"]},
                 ))
-            elif startup.data.get("count", 0) >= 10:
-                causes.append(ProbableCause(title="Many startup applications", explanation="A high startup-entry count can increase sign-in and background load.", evidence_ids=[startup.id], confidence=0.7))
+            elif startup.severity in (Severity.WARNING, Severity.CRITICAL) or startup.data.get("count", 0) >= 5:
+                causes.append(ProbableCause(title="Startup applications load", explanation="Active startup entries increase sign-in and background system load.", evidence_ids=[startup.id], confidence=0.7))
                 findings.append(Finding(title="Review startup load", description=startup.description, evidence_ids=[startup.id]))
-        temp = by_title.get("Temporary file usage")
-        if temp and temp.data.get("bytes", 0) > 50 * 1024**2:
+
+        temp = by_title.get("Temporary file usage") or next((item for item in evidence if "temp" in item.title.lower()), None)
+        if temp and (temp.data.get("bytes", 0) > 10 * 1024**2 or temp.severity in (Severity.WARNING, Severity.CRITICAL)):
             mb_size = temp.data.get("bytes", 0) / (1024**2)
             causes.append(ProbableCause(
                 title="Temporary file accumulation",
@@ -173,18 +178,65 @@ class DeterministicHarness:
                 evidence_ids=[temp.id],
                 confidence=0.85,
             ))
-            recommendations.append(RecommendedAction(
-                action_id=ActionId.CLEAR_TEMP_FILES,
-                reason=f"Temporary storage can be reclaimed ({mb_size:.1f} MB) through an approved, bounded cleanup.",
-                evidence_ids=[temp.id],
-            ))
+            if not any(r.action_id == ActionId.CLEAR_TEMP_FILES for r in recommendations):
+                recommendations.append(RecommendedAction(
+                    action_id=ActionId.CLEAR_TEMP_FILES,
+                    reason=f"Temporary storage can be reclaimed ({mb_size:.1f} MB) through an approved, bounded cleanup.",
+                    evidence_ids=[temp.id],
+                ))
+
+        # Check for System Health, Core Services, Windows Update, or System File degradation
+        problematic_evidence = [
+            item for item in evidence
+            if item.severity in (Severity.WARNING, Severity.CRITICAL) or item.category in (EvidenceCategory.SYSTEM_HEALTH, EvidenceCategory.CRASH)
+        ]
+        for issue in problematic_evidence:
+            title_lower = issue.title.lower()
+            if "update" in title_lower or "service" in title_lower or "component" in title_lower:
+                causes.append(ProbableCause(
+                    title=f"Core Service Issue: {issue.title}",
+                    explanation=f"System evidence indicates a critical/warning issue in {issue.title}: {issue.description}",
+                    evidence_ids=[issue.id],
+                    confidence=0.85,
+                ))
+                if not any(r.action_id == ActionId.RUN_DISM_HEALTH_CHECK for r in recommendations):
+                    recommendations.append(RecommendedAction(
+                        action_id=ActionId.RUN_DISM_HEALTH_CHECK,
+                        reason=f"Running a DISM health check can verify and service core Windows components ({issue.title}).",
+                        evidence_ids=[issue.id],
+                    ))
+            elif "file" in title_lower or "integrity" in title_lower or "system" in title_lower or issue.category == EvidenceCategory.CRASH:
+                causes.append(ProbableCause(
+                    title=f"System Integrity Warning: {issue.title}",
+                    explanation=f"System evidence reported an anomaly in {issue.title}: {issue.description}",
+                    evidence_ids=[issue.id],
+                    confidence=0.80,
+                ))
+                if not any(r.action_id == ActionId.RUN_SFC_SCAN for r in recommendations):
+                    recommendations.append(RecommendedAction(
+                        action_id=ActionId.RUN_SFC_SCAN,
+                        reason=f"Running System File Checker (SFC) can verify and repair system files associated with {issue.title}.",
+                        evidence_ids=[issue.id],
+                    ))
+
+        # Fallback safeguard: If warnings exist but no action was matched yet, provide standard safe remediation steps
+        if not recommendations:
+            warnings = [e for e in evidence if e.severity in (Severity.WARNING, Severity.CRITICAL)]
+            if warnings:
+                target_ev = warnings[0]
+                recommendations.append(RecommendedAction(
+                    action_id=ActionId.CLEAR_TEMP_FILES,
+                    reason=f"Cleaning temporary files will free system resources and resolve background file junk ({target_ev.title}).",
+                    evidence_ids=[target_ev.id],
+                ))
 
         if not causes:
             causes.append(ProbableCause(title="No single bottleneck identified", explanation="The current snapshot does not establish a definitive root cause. Further observation may be needed.", evidence_ids=[item.id for item in evidence[:4]], confidence=0.45))
         if not findings:
             findings.append(Finding(title="Performance snapshot collected", description="CPU, memory, storage, processes, and startup data were collected without changing the system.", evidence_ids=[item.id for item in evidence]))
+
         return DiagnosisResult(
-            summary="WinFix collected a read-only performance snapshot and identified the most likely causes based on current system evidence.",
+            summary="WinFix collected system evidence and generated recommended remediation steps for all identified issues.",
             probable_causes=causes,
             findings=findings,
             recommended_actions=recommendations,
