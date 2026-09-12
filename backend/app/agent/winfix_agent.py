@@ -14,6 +14,7 @@ from app.diagnostics import (
     analyze_windows_optimization,
     check_system_health,
     diagnose_performance,
+    diagnose_windows_update,
     investigate_crashes,
 )
 from app.schemas.actions import ActionId, RecommendedAction
@@ -25,6 +26,44 @@ class AgentHarness(Protocol):
     """Pi integration needs only to fulfill this boundary."""
 
     async def diagnose(self, problem: str, evidence: list[Evidence]) -> DiagnosisResult: ...
+
+
+class GroqHarness:
+    """Direct Groq API adapter using OpenAI-compatible chat completions."""
+
+    def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
+        self.api_key = api_key or os.getenv("GROQ_API_KEY", "")
+        self.model = model or os.getenv("WINFIX_MODEL", "llama-3.3-70b-versatile")
+        self.base_url = "https://api.groq.com/openai/v1"
+
+    async def diagnose(self, problem: str, evidence: list[Evidence]) -> DiagnosisResult:
+        if not self.api_key:
+            raise ValueError("GROQ_API_KEY environment variable is missing.")
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {"user_problem": problem, "evidence": [item.model_dump(mode="json") for item in evidence]}
+                    ),
+                },
+            ],
+        }
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
+            response.raise_for_status()
+
+        content = response.json()["choices"][0]["message"]["content"]
+        result = DiagnosisResult.model_validate_json(content)
+        return result.model_copy(update={"generated_by": f"groq:{self.model}"})
 
 
 class OllamaQwenHarness:
@@ -49,7 +88,6 @@ class OllamaQwenHarness:
                 },
             ],
         }
-        # A missing local Ollama daemon must not make the UI appear stuck.
         async with httpx.AsyncClient(timeout=3.0) as client:
             response = await client.post(f"{self.base_url}/api/chat", json=payload)
             response.raise_for_status()
@@ -97,8 +135,75 @@ class DeterministicHarness:
                 causes.append(ProbableCause(title="Many startup applications", explanation="A high startup-entry count can increase sign-in and background load.", evidence_ids=[startup.id], confidence=0.7))
                 findings.append(Finding(title="Review startup load", description=startup.description, evidence_ids=[startup.id]))
         temp = by_title.get("Temporary file usage")
-        if temp and temp.data.get("bytes", 0) > 2 * 1024**3 and not recommendations:
-            recommendations.append(RecommendedAction(action_id=ActionId.CLEAR_TEMP_FILES, reason="Large temporary-file usage is a safe optimization candidate after approval.", evidence_ids=[temp.id]))
+        if temp and temp.data.get("bytes", 0) > 50 * 1024**2:
+            mb_size = temp.data.get("bytes", 0) / (1024**2)
+            causes.append(ProbableCause(
+                title="Temporary file accumulation",
+                explanation=f"Temporary storage has accumulated {mb_size:.1f} MB of junk files.",
+                evidence_ids=[temp.id],
+                confidence=0.85,
+            ))
+            recommendations.append(RecommendedAction(
+                action_id=ActionId.CLEAR_TEMP_FILES,
+                reason=f"Temporary storage can be reclaimed ({mb_size:.1f} MB) through an approved, bounded cleanup.",
+                evidence_ids=[temp.id],
+            ))
+
+        wu_services = by_title.get("Windows Update core services")
+        if wu_services:
+            if wu_services.data.get("overall_service_health") in ("problem_detected", "warning"):
+                causes.append(ProbableCause(
+                    title="Windows Update service issue",
+                    explanation=f"{wu_services.description} Administrator privileges may be required for future service remediation. No system changes were made during diagnostics.",
+                    evidence_ids=[wu_services.id],
+                    confidence=0.85,
+                ))
+                findings.append(Finding(
+                    title="Windows Update service status",
+                    description=wu_services.description,
+                    evidence_ids=[wu_services.id],
+                ))
+            else:
+                findings.append(Finding(
+                    title="Windows Update services healthy",
+                    description=wu_services.description,
+                    evidence_ids=[wu_services.id],
+                ))
+
+        wu_reboot = by_title.get("Windows Update pending reboot status")
+        if wu_reboot and wu_reboot.data.get("pending_reboot") is True:
+            causes.append(ProbableCause(
+                title="Windows Update pending reboot required",
+                explanation=wu_reboot.description,
+                evidence_ids=[wu_reboot.id],
+                confidence=0.8,
+            ))
+            findings.append(Finding(
+                title="Pending system reboot detected",
+                description=wu_reboot.description,
+                evidence_ids=[wu_reboot.id],
+            ))
+        elif wu_reboot and wu_reboot.data.get("status") == "UNKNOWN":
+            findings.append(Finding(
+                title="Pending reboot status unknown",
+                description=wu_reboot.description,
+                evidence_ids=[wu_reboot.id],
+            ))
+
+        wu_cache = by_title.get("Windows Update download cache")
+        if wu_cache:
+            if wu_cache.data.get("cache_accessible") is False or wu_cache.data.get("error_message"):
+                findings.append(Finding(
+                    title="Windows Update cache inspection issue",
+                    description=wu_cache.description,
+                    evidence_ids=[wu_cache.id],
+                ))
+            else:
+                findings.append(Finding(
+                    title="Windows Update cache metadata collected",
+                    description=wu_cache.description,
+                    evidence_ids=[wu_cache.id],
+                ))
 
         if not causes:
             causes.append(ProbableCause(title="No single bottleneck identified", explanation="The current snapshot does not establish a definitive root cause. Further observation may be needed.", evidence_ids=[item.id for item in evidence[:4]], confidence=0.45))
@@ -119,22 +224,33 @@ class WinFixAgent:
 
     def __init__(self, harness: AgentHarness | None = None) -> None:
         runtime = os.getenv("WINFIX_AGENT_RUNTIME", "pi").lower()
-        self.harness = harness or (OllamaQwenHarness() if runtime == "direct_ollama" else PiAgentHarness())
+        if harness:
+            self.harness = harness
+        elif runtime == "groq":
+            self.harness = GroqHarness()
+        elif runtime == "direct_ollama":
+            self.harness = OllamaQwenHarness()
+        else:
+            self.harness = PiAgentHarness()
         self.fallback = DeterministicHarness()
 
     async def investigate(self, user_problem: str, categories: list[str]) -> tuple[list[Evidence], DiagnosisResult]:
         requested = set(categories or ["performance"])
+        prob_lower = user_problem.lower()
+        if any(term in prob_lower for term in ["update", "wuauserv", "bits", "cryptsvc", "patch", "kb"]):
+            requested.add("windows_update")
+
         if isinstance(self.harness, PiAgentHarness) and requested == {"performance"}:
             try:
                 return await self.harness.investigate_performance(user_problem)
-            except (PiHarnessError, OSError):
+            except (PiHarnessError, OSError, NotImplementedError):
                 evidence = diagnose_performance()
                 return evidence, await self.fallback.diagnose(user_problem, evidence)
 
         evidence = self._collect_evidence(requested)
         try:
             diagnosis = await self.harness.diagnose(user_problem, evidence)
-        except (httpx.HTTPError, KeyError, TypeError, ValidationError, ValueError):
+        except (httpx.HTTPError, KeyError, TypeError, ValidationError, ValueError, AttributeError):
             diagnosis = await self.fallback.diagnose(user_problem, evidence)
         return evidence, diagnosis
 
@@ -145,6 +261,8 @@ class WinFixAgent:
             evidence.extend(diagnose_performance())
         if "system_health" in requested:
             evidence.extend(check_system_health())
+        if "windows_update" in requested:
+            evidence.extend(diagnose_windows_update())
         if "crash" in requested:
             evidence.extend(investigate_crashes())
         if "optimization" in requested:

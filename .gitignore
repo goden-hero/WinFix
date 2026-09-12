@@ -4,3 +4,7 @@ backend/pi_runtime/node_modules/
 frontend/node_modules/
 frontend/dist/
 .env
+__pycache__/
+*.py[cod]
+.venv/
+venv/
