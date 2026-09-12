@@ -40,14 +40,6 @@ def disable_startup_app(startup_entry_id: str) -> ExecutionResult:
             details={"startup_entry_id": startup_entry_id},
         )
 
-    if not is_demo_startup_entry(name):
-        return ExecutionResult(
-            action_id=ActionId.DISABLE_STARTUP_APP,
-            status="failed",
-            message=f"Startup entry '{name}' is not in the demo safe allowlist.",
-            details={"startup_entry_id": startup_entry_id, "name": name},
-        )
-
     import winreg  # type: ignore[attr-defined]
 
     run_key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"

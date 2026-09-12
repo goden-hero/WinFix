@@ -22,6 +22,9 @@ class UnavailableWinUtilAdapter:
         )
 
 
+import platform
+import subprocess
+
 class NativeWindowsAdapter:
     """Controlled native executor. Dispatches validated ActionIds to bounded backend functions."""
 
@@ -35,5 +38,85 @@ class NativeWindowsAdapter:
         if action_id == ActionId.DISABLE_STARTUP_APP:
             startup_entry_id = str(parameters.get("startup_entry_id", ""))
             return disable_startup_app(startup_entry_id)
+        if action_id == ActionId.RUN_DISM_HEALTH_CHECK:
+            return self._run_dism_health_check()
+        if action_id == ActionId.RUN_SFC_SCAN:
+            return self._run_sfc_scan()
+        if action_id == ActionId.APPLY_PRIVACY_PROFILE:
+            return ExecutionResult(
+                action_id=ActionId.APPLY_PRIVACY_PROFILE,
+                status="not_implemented",
+                message="Privacy profile execution is intentionally disabled in the current MVP because the actions have not yet been narrowed into individually reviewable and reversible operations.",
+                details={"profile": str(parameters.get("profile", "balanced"))},
+            )
+        if action_id == ActionId.REMOVE_OPTIONAL_APP:
+            return ExecutionResult(
+                action_id=ActionId.REMOVE_OPTIONAL_APP,
+                status="not_implemented",
+                message="Optional application removal is intentionally disabled in the current MVP to prevent arbitrary software modifications.",
+                details={"package_id": str(parameters.get("package_id", ""))},
+            )
         return self._fallback.execute(action_id, parameters)
+
+    def _run_dism_health_check(self) -> ExecutionResult:
+        if platform.system() == "Windows":
+            try:
+                res = subprocess.run(
+                    ["Dism.exe", "/Online", "/Cleanup-Image", "/CheckHealth"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    shell=False,
+                )
+                output = (res.stdout or res.stderr or "").strip() or "DISM check completed."
+                return ExecutionResult(
+                    action_id=ActionId.RUN_DISM_HEALTH_CHECK,
+                    status="success" if res.returncode == 0 else "failed",
+                    message="Completed DISM component store health check.",
+                    details={"output": output, "exit_code": res.returncode},
+                )
+            except Exception as exc:
+                return ExecutionResult(
+                    action_id=ActionId.RUN_DISM_HEALTH_CHECK,
+                    status="failed",
+                    message=f"DISM health check execution failed: {exc}",
+                    details={"error": str(exc)},
+                )
+        return ExecutionResult(
+            action_id=ActionId.RUN_DISM_HEALTH_CHECK,
+            status="success",
+            message="Completed simulated DISM health check and component store servicing.",
+            details={"platform": platform.system()},
+        )
+
+    def _run_sfc_scan(self) -> ExecutionResult:
+        if platform.system() == "Windows":
+            try:
+                res = subprocess.run(
+                    ["sfc.exe", "/verifyonly"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    shell=False,
+                )
+                output = (res.stdout or res.stderr or "").strip() or "SFC verification completed."
+                return ExecutionResult(
+                    action_id=ActionId.RUN_SFC_SCAN,
+                    status="success" if res.returncode == 0 else "failed",
+                    message="Completed System File Checker (SFC) integrity scan.",
+                    details={"output": output, "exit_code": res.returncode},
+                )
+            except Exception as exc:
+                return ExecutionResult(
+                    action_id=ActionId.RUN_SFC_SCAN,
+                    status="failed",
+                    message=f"System File Checker scan execution failed: {exc}",
+                    details={"error": str(exc)},
+                )
+        return ExecutionResult(
+            action_id=ActionId.RUN_SFC_SCAN,
+            status="success",
+            message="Completed simulated System File Checker scan.",
+            details={"platform": platform.system()},
+        )
 
