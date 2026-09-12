@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import os
+import platform
+import subprocess
 from typing import Protocol
 
 from app.executor.sfc_runner import SfcRunner
 from app.executor.startup_manager import disable_startup_app
 from app.executor.temp_cleaner import clear_temp_files
+from app.safety.privilege import is_windows_admin
 from app.schemas.actions import ActionId, ExecutionResult
 
 
@@ -22,10 +26,6 @@ class UnavailableWinUtilAdapter:
             message="WinUtil integration is not configured for this WinFix installation.",
         )
 
-
-import os
-import platform
-import subprocess
 
 class NativeWindowsAdapter:
     """Controlled native executor. Dispatches validated ActionIds to bounded backend functions."""
@@ -51,19 +51,26 @@ class NativeWindowsAdapter:
             return ExecutionResult(
                 action_id=ActionId.APPLY_PRIVACY_PROFILE,
                 status="not_implemented",
-                message="Privacy profile execution is intentionally disabled in the current MVP because the actions have not yet been narrowed into individually reviewable and reversible operations.",
+                message="Privacy profile execution is intentionally disabled in the current MVP.",
                 details={"profile": str(parameters.get("profile", "balanced"))},
             )
         if action_id == ActionId.REMOVE_OPTIONAL_APP:
             return ExecutionResult(
                 action_id=ActionId.REMOVE_OPTIONAL_APP,
                 status="not_implemented",
-                message="Optional application removal is intentionally disabled in the current MVP to prevent arbitrary software modifications.",
+                message="Optional application removal is intentionally disabled in the current MVP.",
                 details={"package_id": str(parameters.get("package_id", ""))},
             )
         return self._fallback.execute(action_id, parameters)
 
     def _run_dism_health_check(self) -> ExecutionResult:
+        if not is_windows_admin():
+            return ExecutionResult(
+                action_id=ActionId.RUN_DISM_HEALTH_CHECK,
+                status="requires_elevation",
+                message="Administrator privileges are required to run DISM health check.",
+                details={"requires_admin": True, "platform": platform.system()},
+            )
         if platform.system() == "Windows":
             try:
                 res = subprocess.run(
@@ -74,11 +81,11 @@ class NativeWindowsAdapter:
                     shell=False,
                 )
                 output = (res.stdout or res.stderr or "").strip() or "DISM check completed."
-                if res.returncode != 0 and ("740" in output or "elevated" in output.lower() or os.environ.get("PYTEST_CURRENT_TEST")):
+                if res.returncode != 0 and ("740" in output or "elevated" in output.lower()):
                     return ExecutionResult(
                         action_id=ActionId.RUN_DISM_HEALTH_CHECK,
-                        status="success",
-                        message="Completed simulated DISM health check and component store servicing.",
+                        status="requires_elevation",
+                        message="DISM health check requires Administrator privileges.",
                         details={"output": output, "exit_code": res.returncode, "platform": platform.system()},
                     )
                 return ExecutionResult(
@@ -88,13 +95,6 @@ class NativeWindowsAdapter:
                     details={"output": output, "exit_code": res.returncode},
                 )
             except Exception as exc:
-                if os.environ.get("PYTEST_CURRENT_TEST"):
-                    return ExecutionResult(
-                        action_id=ActionId.RUN_DISM_HEALTH_CHECK,
-                        status="success",
-                        message="Completed simulated DISM health check and component store servicing.",
-                        details={"platform": platform.system()},
-                    )
                 return ExecutionResult(
                     action_id=ActionId.RUN_DISM_HEALTH_CHECK,
                     status="failed",
@@ -103,12 +103,19 @@ class NativeWindowsAdapter:
                 )
         return ExecutionResult(
             action_id=ActionId.RUN_DISM_HEALTH_CHECK,
-            status="success",
-            message="Completed simulated DISM health check and component store servicing.",
+            status="requires_elevation",
+            message="Administrator privileges are required to run DISM health check.",
             details={"platform": platform.system()},
         )
 
     def _run_sfc_scan(self) -> ExecutionResult:
+        if not is_windows_admin():
+            return ExecutionResult(
+                action_id=ActionId.RUN_SFC_SCAN,
+                status="requires_elevation",
+                message="Administrator privileges are required to run System File Checker scan.",
+                details={"requires_admin": True, "platform": platform.system()},
+            )
         if platform.system() == "Windows":
             try:
                 res = subprocess.run(
@@ -119,11 +126,11 @@ class NativeWindowsAdapter:
                     shell=False,
                 )
                 output = (res.stdout or res.stderr or "").strip() or "SFC verification completed."
-                if res.returncode != 0 and ("must be an administrator" in output.lower() or os.environ.get("PYTEST_CURRENT_TEST")):
+                if res.returncode != 0 and ("must be an administrator" in output.lower() or "740" in output or "elevated" in output.lower()):
                     return ExecutionResult(
                         action_id=ActionId.RUN_SFC_SCAN,
-                        status="success",
-                        message="Completed simulated System File Checker scan.",
+                        status="requires_elevation",
+                        message="System File Checker scan requires Administrator privileges.",
                         details={"output": output, "exit_code": res.returncode, "platform": platform.system()},
                     )
                 return ExecutionResult(
@@ -133,13 +140,6 @@ class NativeWindowsAdapter:
                     details={"output": output, "exit_code": res.returncode},
                 )
             except Exception as exc:
-                if os.environ.get("PYTEST_CURRENT_TEST"):
-                    return ExecutionResult(
-                        action_id=ActionId.RUN_SFC_SCAN,
-                        status="success",
-                        message="Completed simulated System File Checker scan.",
-                        details={"platform": platform.system()},
-                    )
                 return ExecutionResult(
                     action_id=ActionId.RUN_SFC_SCAN,
                     status="failed",
@@ -148,8 +148,7 @@ class NativeWindowsAdapter:
                 )
         return ExecutionResult(
             action_id=ActionId.RUN_SFC_SCAN,
-            status="success",
-            message="Completed simulated System File Checker scan.",
+            status="requires_elevation",
+            message="Administrator privileges are required to run System File Checker scan.",
             details={"platform": platform.system()},
         )
-

@@ -93,7 +93,7 @@ class SfcRunnerAndSafetyTest(unittest.TestCase):
                 sfc_path=self.dummy_sfc_path,
             )
             result = runner.execute()
-            self.assertEqual(result.status, "failed")
+            self.assertEqual(result.status, "requires_elevation")
             self.assertEqual(result.details["parsed_status"], SfcParsedStatus.PERMISSION_DENIED.value)
             self.assertIn("Administrator privileges are required", result.message)
 

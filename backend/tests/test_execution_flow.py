@@ -12,16 +12,22 @@ from app.services.session_service import SessionService
 
 
 def test_native_windows_adapter_executes_all_actions():
-    """Verify NativeWindowsAdapter returns success for DISM, SFC, privacy, app removal, and temp clean."""
+    """Verify NativeWindowsAdapter returns success for DISM, SFC when elevated, and not_implemented for disabled MVP actions."""
     adapter = NativeWindowsAdapter()
 
-    res_dism = adapter.execute(ActionId.RUN_DISM_HEALTH_CHECK, {})
-    assert res_dism.status == "success"
-    assert res_dism.action_id == ActionId.RUN_DISM_HEALTH_CHECK
+    from unittest.mock import patch, MagicMock
 
-    res_sfc = adapter.execute(ActionId.RUN_SFC_SCAN, {})
-    assert res_sfc.status == "success"
-    assert res_sfc.action_id == ActionId.RUN_SFC_SCAN
+    with patch("app.executor.winutil_adapter.is_windows_admin", return_value=True), \
+         patch("platform.system", return_value="Windows"), \
+         patch("subprocess.run") as mock_sub:
+        mock_sub.return_value = MagicMock(returncode=0, stdout="OK", stderr="")
+        res_dism = adapter.execute(ActionId.RUN_DISM_HEALTH_CHECK, {})
+        assert res_dism.status == "success"
+        assert res_dism.action_id == ActionId.RUN_DISM_HEALTH_CHECK
+
+        res_sfc = adapter.execute(ActionId.RUN_SFC_SCAN, {})
+        assert res_sfc.status == "success"
+        assert res_sfc.action_id == ActionId.RUN_SFC_SCAN
 
     res_privacy = adapter.execute(ActionId.APPLY_PRIVACY_PROFILE, {"profile": "balanced"})
     assert res_privacy.status == "not_implemented"

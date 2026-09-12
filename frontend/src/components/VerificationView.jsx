@@ -1,3 +1,4 @@
+import React from "react";
 import { formatBytes } from "./ExecutionView";
 
 export function VerificationView({ results }) {
@@ -9,6 +10,34 @@ export function VerificationView({ results }) {
       <p className="panel-subtitle">Independent system inspection comparing baseline before execution with current state.</p>
       <div className="verification-list">
         {results.map((res, idx) => {
+          if (res.status === "requires_elevation") {
+            return (
+              <article className="verification-card" key={idx} style={{ borderLeft: "4px solid #ffd166", padding: "16px", marginBottom: "16px" }}>
+                <div className="verification-header">
+                  <span className="verification-badge warning" style={{ background: "#ffd166", color: "#111" }}>REQUIRES ELEVATION</span>
+                  <h3>🔒 Administrator Privileges Required</h3>
+                </div>
+                <div className="verification-summary" style={{ marginTop: "12px" }}>
+                  <p>{res.summary || "This repair requires Administrator privileges and was not executed."}</p>
+                </div>
+              </article>
+            );
+          }
+
+          if (res.status === "not_implemented") {
+            return (
+              <article className="verification-card" key={idx} style={{ borderLeft: "4px solid #90e0ef", padding: "16px", marginBottom: "16px" }}>
+                <div className="verification-header">
+                  <span className="verification-badge info" style={{ background: "#90e0ef", color: "#111" }}>NOT IMPLEMENTED</span>
+                  <h3>⚠️ Not Available in MVP</h3>
+                </div>
+                <div className="verification-summary" style={{ marginTop: "12px" }}>
+                  <p>{res.summary || "This remediation capability is intentionally disabled in the current controlled-execution version of WinFix."}</p>
+                </div>
+              </article>
+            );
+          }
+
           const isStartup = res.action_id === "disable_startup_app";
           if (isStartup) {
             return (
@@ -83,3 +112,5 @@ export function VerificationView({ results }) {
     </section>
   );
 }
+
+export default VerificationView;

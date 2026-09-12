@@ -20,15 +20,9 @@ from app.schemas.actions import ActionId, ExecutionResult
 DEFAULT_TIMEOUT_SECONDS = 300.0
 
 
-def check_windows_admin() -> bool:
-    """Check if current process has Windows Administrator privileges."""
-    if os.name != "nt":
-        return False
-    try:
-        import ctypes
-        return ctypes.windll.shell32.IsUserAnAdmin() != 0
-    except Exception:
-        return False
+from app.safety.privilege import is_windows_admin
+
+check_windows_admin = is_windows_admin
 
 
 def default_process_runner(executable: str, args: list[str], timeout: float) -> tuple[int, str, str]:
@@ -143,7 +137,7 @@ class SfcRunner:
             end_time = datetime.now(timezone.utc)
             return ExecutionResult(
                 action_id=ActionId.RUN_SFC_SCAN,
-                status="failed",
+                status="requires_elevation",
                 message="Administrator privileges are required to run SFC scan.",
                 details={
                     "command": "sfc.exe /scannow",

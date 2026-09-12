@@ -49,6 +49,8 @@ class ActionDefinition(BaseModel):
     executor_name: str
     verifier_name: str
     enabled: bool = False
+    implemented: bool = True
+    requires_admin: bool = False
 
 
 class ApprovalDecision(BaseModel):

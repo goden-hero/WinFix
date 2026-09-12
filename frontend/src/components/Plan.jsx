@@ -28,9 +28,11 @@ const rollbackMap = {
 };
 
 const UNSUPPORTED_ACTIONS = new Set(["apply_privacy_profile", "remove_optional_app"]);
+const ADMIN_ACTIONS = new Set(["run_sfc_scan", "run_dism_health_check"]);
 
-export function Plan({ actions = [], plan = [], approvedActions = {}, onApprove, busy }) {
+export function Plan({ actions = [], plan = [], approvedActions = {}, onApprove, busy, systemStatus }) {
   const items = actions.length > 0 ? actions : plan;
+  const isAdmin = systemStatus?.is_admin ?? false;
 
   return (
     <section className="panel card plan-card">
@@ -48,7 +50,8 @@ export function Plan({ actions = [], plan = [], approvedActions = {}, onApprove,
           {items.map((action, i) => {
             const actionId = action.action_id || action.id || "action";
             const isStartup = actionId === "disable_startup_app";
-            const isUnsupported = UNSUPPORTED_ACTIONS.has(actionId);
+            const isUnsupported = UNSUPPORTED_ACTIONS.has(actionId) || action.implemented === false;
+            const requiresAdmin = ADMIN_ACTIONS.has(actionId) || action.requires_admin === true;
             const isApproved = approvedActions[actionId] === true;
 
             const appName = isStartup
@@ -57,6 +60,14 @@ export function Plan({ actions = [], plan = [], approvedActions = {}, onApprove,
             const title = action.text || (isStartup ? `Disable Startup Application: ${appName}` : (labels[actionId] ?? actionId));
             const scope = scopeMap[actionId] || "Controlled Windows execution";
             const rollback = rollbackMap[actionId] || "Not applicable";
+
+            const capabilityText = isUnsupported
+              ? "Not Available in MVP"
+              : requiresAdmin
+              ? isAdmin
+                ? "Administrator Privileges Available"
+                : "Administrator privileges not available"
+              : "Executable (No Admin Required)";
 
             return (
               <li key={actionId + i} className={`plan-step plan-item ${isUnsupported ? "unsupported-step" : ""}`}>
@@ -67,7 +78,12 @@ export function Plan({ actions = [], plan = [], approvedActions = {}, onApprove,
                     <span className="badge safe">Target: {scope}</span>
                     {isUnsupported && (
                       <span className="badge danger">
-                        Not available in MVP
+                        ⚠️ Not Available in MVP
+                      </span>
+                    )}
+                    {!isUnsupported && requiresAdmin && (
+                      <span className={`badge ${isAdmin ? "safe" : "warning"}`}>
+                        🔒 {isAdmin ? "Admin Available" : "Requires Administrator"}
                       </span>
                     )}
                   </div>
@@ -75,13 +91,15 @@ export function Plan({ actions = [], plan = [], approvedActions = {}, onApprove,
                   <p className="plan-reason">{action.reason || action.description}</p>
                   <div className="plan-meta">
                     <span>Target Scope: {scope}</span>
+                    <span>Admin Required: {requiresAdmin ? "YES" : "NO"}</span>
+                    <span>Capability: {capabilityText}</span>
                     <span>Rollback: {rollback}</span>
                   </div>
                 </div>
 
                 {isUnsupported ? (
                   <button type="button" className="btn btn-disabled" disabled style={{ opacity: 0.5, cursor: "not-allowed" }}>
-                    Coming soon
+                    Not Available in MVP
                   </button>
                 ) : (
                   <button

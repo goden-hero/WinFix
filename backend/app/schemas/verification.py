@@ -13,6 +13,8 @@ class VerificationStatus(str, Enum):
     NOT_VERIFIED = "not_verified"
     SKIPPED = "skipped"
     FAILED = "failed"
+    REQUIRES_ELEVATION = "requires_elevation"
+    NOT_IMPLEMENTED = "not_implemented"
 
 
 class VerificationMetric(BaseModel):

@@ -23,6 +23,10 @@ async function request(path, options = {}) {
 }
 
 export const winfixApi = {
+  getActions: () => request("/actions"),
+
+  getSystemStatus: () => request("/system/status"),
+
   createSession: (user_problem) =>
     request("/sessions", {
       method: "POST",

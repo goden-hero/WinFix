@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { winfixApi } from "./api/client.js";
 
 import ProblemInput from "./components/ProblemInput.jsx";
@@ -9,6 +9,8 @@ import EvidenceList from "./components/EvidenceList.jsx";
 import Plan from "./components/Plan.jsx";
 import ApprovalDialog from "./components/ApprovalDialog.jsx";
 import RepairProgress from "./components/RepairProgress.jsx";
+import ExecutionView from "./components/ExecutionView.jsx";
+import VerificationView from "./components/VerificationView.jsx";
 import VerificationResult from "./components/VerificationResult.jsx";
 
 import "./styles.css";
@@ -184,6 +186,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [approvedActions, setApprovedActions] = useState({});
+  const [systemStatus, setSystemStatus] = useState({ is_admin: false });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState({
     api:
@@ -195,6 +198,13 @@ export default function App() {
     theme: "dark",
     autoScroll: "enabled",
   });
+
+  useEffect(() => {
+    winfixApi
+      .getSystemStatus()
+      .then((status) => setSystemStatus(status))
+      .catch(() => setSystemStatus({ is_admin: false }));
+  }, []);
 
   const isWorking = busy || phase === PHASE.DIAGNOSING;
 
@@ -375,7 +385,7 @@ export default function App() {
           <div className="topbar-right">
             <span className="status-pill">
               <span className="status-dot" />
-              connected
+              {systemStatus?.is_admin ? "connected (admin)" : "connected (user)"}
             </span>
             <div className="window-controls" aria-hidden="true">
               <WindowIcon type="min" />
@@ -441,6 +451,7 @@ export default function App() {
                     setShowApproval(true);
                   }}
                   busy={busy}
+                  systemStatus={systemStatus}
                 />
               </>
             )}
@@ -448,31 +459,25 @@ export default function App() {
             {phase === PHASE.REPAIRING && (
               <>
                 <RepairProgress steps={getRepairSteps(repairStatus)} status={repairStatus} busy={busy} />
-                {repairStatus === "approved" && (
-                  <div className="action-bar" style={{ marginTop: "20px" }}>
-                    <button type="button" className="btn btn-primary btn-lg" onClick={handleExecute} disabled={busy}>
-                      {busy ? "⚙ Executing Repair..." : "🔧 Execute Approved Repair"}
-                      <ArrowIcon />
-                    </button>
-                  </div>
-                )}
-                {repairStatus === "verifying" && (
-                  <div className="action-bar" style={{ marginTop: "20px" }}>
-                    <button type="button" className="btn btn-primary btn-lg" onClick={handleVerify} disabled={busy}>
-                      {busy ? "🔍 Verifying System..." : "✓ Verify System"}
-                      <ArrowIcon />
-                    </button>
-                  </div>
-                )}
+                <ExecutionView
+                  results={session?.execution_results}
+                  onExecute={handleExecute}
+                  onVerify={handleVerify}
+                  status={repairStatus}
+                  busy={busy}
+                />
               </>
             )}
 
             {phase === PHASE.VERIFIED && session?.verification_results && (
-              <VerificationResult
-                verification={session.verification_results}
-                sessionId={session.session_id}
-                onRestart={handleReset}
-              />
+              <>
+                <VerificationView results={session.verification_results} />
+                <VerificationResult
+                  verification={session.verification_results}
+                  sessionId={session.session_id}
+                  onRestart={handleReset}
+                />
+              </>
             )}
 
             {session?.status === "failed" && (

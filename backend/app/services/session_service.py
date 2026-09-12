@@ -87,6 +87,25 @@ class SessionService:
         
         verification_results = []
         for result in session.execution_results:
+            if result.status == "requires_elevation":
+                verification_results.append(
+                    VerificationResult(
+                        action_id=result.action_id,
+                        status=VerificationStatus.REQUIRES_ELEVATION,
+                        summary=f"Action '{result.action_id.value}' requires Administrator privileges and was not executed.",
+                    )
+                )
+                continue
+            if result.status == "not_implemented":
+                verification_results.append(
+                    VerificationResult(
+                        action_id=result.action_id,
+                        status=VerificationStatus.NOT_IMPLEMENTED,
+                        summary=f"Action '{result.action_id.value}' is intentionally disabled in the current MVP version.",
+                    )
+                )
+                continue
+
             if result.action_id == ActionId.CLEAR_TEMP_FILES:
                 bytes_before = int(result.details.get("bytes_before", 0))
                 files_before = int(result.details.get("file_count_before", 0))
