@@ -28,14 +28,17 @@ class PiAgentHarness:
     async def investigate_performance(self, problem: str) -> tuple[list[Evidence], DiagnosisResult]:
         if not self.runner_path.is_file():
             raise PiHarnessError(f"Pi runtime is missing: {self.runner_path}")
-        process = await asyncio.create_subprocess_exec(
-            self.node_binary,
-            str(self.runner_path),
-            cwd=str(self.runner_path.parent),
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        try:
+            process = await asyncio.create_subprocess_exec(
+                self.node_binary,
+                str(self.runner_path),
+                cwd=str(self.runner_path.parent),
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except NotImplementedError as error:
+            raise PiHarnessError("Asyncio event loop on Windows does not support subprocesses in this environment.") from error
         evidence: list[Evidence] = []
         try:
             await self._send(process, {"type": "start", "problem": problem})

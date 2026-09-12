@@ -173,7 +173,7 @@ class WinFixAgent:
         if isinstance(self.harness, PiAgentHarness) and requested == {"performance"}:
             try:
                 return await self.harness.investigate_performance(user_problem)
-            except (PiHarnessError, OSError):
+            except (PiHarnessError, OSError, NotImplementedError):
                 evidence = diagnose_performance()
                 return evidence, await self.fallback.diagnose(user_problem, evidence)
 
