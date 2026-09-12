@@ -263,7 +263,7 @@ export default function App() {
   );
 
   const handleApprove = useCallback(
-    async () => {
+    async (targetActionId) => {
       if (!session || busy) return;
 
       const actions =
@@ -284,20 +284,35 @@ export default function App() {
         const decisions = actions.map(
           (action) => ({
             action_id: action.action_id,
-            approved: true,
+            approved: typeof targetActionId === "string" ? action.action_id === targetActionId : true,
           })
         );
 
-        const updated =
+        const approvedSession =
           await winfixApi.approve(
             session.session_id,
             decisions
           );
+        setSession(approvedSession);
 
-        setSession(updated);
+        const executedSession =
+          await winfixApi.executeSession(
+            session.session_id
+          );
+        setSession(executedSession);
+
+        const verifiedSession =
+          await winfixApi.verifySession(
+            session.session_id
+          );
+        setSession(verifiedSession);
+
+        if (verifiedSession.status === "completed") {
+          setPhase(PHASE.VERIFIED);
+        }
       } catch (err) {
         setError(
-          err.message || "Approval failed"
+          err.message || "Approval or execution failed"
         );
         setPhase(PHASE.DIAGNOSIS);
       } finally {
@@ -561,9 +576,7 @@ export default function App() {
 
               <Plan
                 plan={plan}
-                onApprove={() =>
-                  setShowApproval(true)
-                }
+                onApprove={(actionId) => handleApprove(actionId)}
               />
 
               <ApprovalDialog

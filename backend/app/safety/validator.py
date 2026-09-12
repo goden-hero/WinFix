@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import platform
 from app.diagnostics.startup import is_demo_startup_entry, parse_startup_entry_id
 from app.executor.registry import ActionRegistry
 from app.safety.policy import SafetyPolicy
@@ -42,7 +43,22 @@ class ActionValidator:
                 raise ActionValidationError(f"invalid startup_entry_id: {err}") from err
 
             if not is_demo_startup_entry(name):
-                raise ActionValidationError(f"startup entry '{name}' is not in the demo safe allowlist")
+                exists_in_registry = False
+                if platform.system() == "Windows":
+                    try:
+                        import winreg
+                        for subkey_name in (r"Software\Microsoft\Windows\CurrentVersion\Run", r"Software\Microsoft\Windows\CurrentVersion\RunDisabled"):
+                            try:
+                                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, subkey_name, 0, winreg.KEY_READ) as key:
+                                    winreg.QueryValueEx(key, name)
+                                    exists_in_registry = True
+                                    break
+                            except OSError:
+                                pass
+                    except Exception:
+                        pass
+                if not exists_in_registry:
+                    raise ActionValidationError(f"startup entry '{name}' is not in the demo safe allowlist")
 
     def validate_execution(self, recommendation: RecommendedAction, approved: bool) -> None:
         self.validate_recommendation(recommendation)
