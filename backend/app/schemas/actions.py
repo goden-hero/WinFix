@@ -20,6 +20,15 @@ class ActionId(str, Enum):
     RUN_SFC_SCAN = "run_sfc_scan"
     RUN_DISM_HEALTH_CHECK = "run_dism_health_check"
 
+    @classmethod
+    def _missing_(cls, value: object) -> ActionId | None:
+        if isinstance(value, str):
+            val_lower = value.lower()
+            for member in cls:
+                if member.value == val_lower or member.name == value.upper():
+                    return member
+        return None
+
 
 class RecommendedAction(BaseModel):
     """An agent recommendation. It is not an execution request."""

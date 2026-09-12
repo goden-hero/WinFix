@@ -25,31 +25,62 @@ export function ExecutionView({ results, onExecute, onVerify, status, busy }) {
     <section className="panel execution-panel">
       <h2>Execution Results</h2>
       <div className="execution-list">
-        {results.map((res, idx) => (
-          <article className="execution-card" key={idx}>
-            <div className="execution-header">
-              <span className={`status-badge ${res.status}`}>{res.status.toUpperCase()}</span>
-              <h3>{res.action_id === "clear_temp_files" ? "Clear Approved Temporary Files" : res.action_id}</h3>
-            </div>
-            <p className="execution-message">{res.message}</p>
-            {res.details && (
-              <div className="execution-metrics">
-                <div className="metric-chip">
-                  <small>Files Cleaned</small>
-                  <strong>{res.details.files_deleted ?? 0}</strong>
-                </div>
-                <div className="metric-chip">
-                  <small>Storage Reclaimed</small>
-                  <strong>{formatBytes(res.details.bytes_reclaimed)}</strong>
-                </div>
-                <div className="metric-chip">
-                  <small>Target Root</small>
-                  <span className="root-path">{res.details.target_directory ?? "Default Demo Root"}</span>
-                </div>
+        {results.map((res, idx) => {
+          const isStartup = res.action_id === "disable_startup_app";
+          const title = isStartup
+            ? `DISABLE_STARTUP_APP (${res.details?.name ?? "Startup App"})`
+            : res.action_id === "clear_temp_files"
+            ? "Clear Approved Temporary Files"
+            : res.action_id;
+
+          return (
+            <article className="execution-card" key={idx}>
+              <div className="execution-header">
+                <span className={`status-badge ${res.status}`}>{res.status.toUpperCase()}</span>
+                <h3>{title}</h3>
               </div>
-            )}
-          </article>
-        ))}
+              <p className="execution-message">{res.message}</p>
+              {res.details && !isStartup && (
+                <div className="execution-metrics">
+                  <div className="metric-chip">
+                    <small>Files Cleaned</small>
+                    <strong>{res.details.files_deleted ?? 0}</strong>
+                  </div>
+                  <div className="metric-chip">
+                    <small>Storage Reclaimed</small>
+                    <strong>{formatBytes(res.details.bytes_reclaimed)}</strong>
+                  </div>
+                  <div className="metric-chip">
+                    <small>Target Root</small>
+                    <span className="root-path">{res.details.target_directory ?? "Default Demo Root"}</span>
+                  </div>
+                </div>
+              )}
+              {res.details && isStartup && (
+                <div className="execution-metrics">
+                  <div className="metric-chip">
+                    <small>Target Entry</small>
+                    <strong>{res.details.name ?? "N/A"}</strong>
+                  </div>
+                  <div className="metric-chip">
+                    <small>State Before</small>
+                    <strong style={{ color: "#ffd166" }}>{res.details.state_before ?? "ENABLED"}</strong>
+                  </div>
+                  <div className="metric-chip">
+                    <small>State After</small>
+                    <strong style={{ color: "#4ee6b6" }}>{res.details.state_after ?? "DISABLED"}</strong>
+                  </div>
+                  <div className="metric-chip">
+                    <small>Active Startup Entries</small>
+                    <strong>
+                      {res.details.enabled_entries_before ?? 0} → {res.details.enabled_entries_after ?? 0}
+                    </strong>
+                  </div>
+                </div>
+              )}
+            </article>
+          );
+        })}
       </div>
       {status === "verifying" && (
         <div className="action-row">

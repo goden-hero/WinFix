@@ -115,9 +115,26 @@ class DeterministicHarness:
             causes.append(ProbableCause(title="Low system drive capacity", explanation="A nearly full system drive can slow updates and temporary-file workloads.", evidence_ids=[disk.id], confidence=0.8))
             recommendations.append(RecommendedAction(action_id=ActionId.CLEAR_TEMP_FILES, reason="Temporary storage can be reclaimed through an approved, bounded cleanup.", evidence_ids=[disk.id]))
         startup = by_title.get("Startup applications")
-        if startup and startup.data.get("count", 0) >= 10:
-            causes.append(ProbableCause(title="Many startup applications", explanation="A high startup-entry count can increase sign-in and background load.", evidence_ids=[startup.id], confidence=0.7))
-            findings.append(Finding(title="Review startup load", description=startup.description, evidence_ids=[startup.id]))
+        if startup:
+            entries = startup.data.get("entries", [])
+            demo_active = [e for e in entries if e.get("is_demo") and e.get("enabled")]
+            if demo_active:
+                target_entry = demo_active[0]
+                causes.append(ProbableCause(
+                    title="Startup Overhead",
+                    explanation=f"Application '{target_entry['name']}' starts automatically with Windows and contributes to startup overhead.",
+                    evidence_ids=[startup.id],
+                    confidence=0.85,
+                ))
+                recommendations.append(RecommendedAction(
+                    action_id=ActionId.DISABLE_STARTUP_APP,
+                    reason=f"Application '{target_entry['name']}' starts automatically with Windows and may contribute to startup overhead.",
+                    evidence_ids=[startup.id],
+                    parameters={"startup_entry_id": target_entry["id"]},
+                ))
+            elif startup.data.get("count", 0) >= 10:
+                causes.append(ProbableCause(title="Many startup applications", explanation="A high startup-entry count can increase sign-in and background load.", evidence_ids=[startup.id], confidence=0.7))
+                findings.append(Finding(title="Review startup load", description=startup.description, evidence_ids=[startup.id]))
         temp = by_title.get("Temporary file usage")
         if temp and temp.data.get("bytes", 0) > 2 * 1024**3 and not recommendations:
             recommendations.append(RecommendedAction(action_id=ActionId.CLEAR_TEMP_FILES, reason="Large temporary-file usage is a safe optimization candidate after approval.", evidence_ids=[temp.id]))

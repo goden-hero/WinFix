@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from app.executor.startup_manager import disable_startup_app
 from app.executor.temp_cleaner import clear_temp_files
 from app.schemas.actions import ActionId, ExecutionResult
 
@@ -31,4 +32,8 @@ class NativeWindowsAdapter:
         if action_id == ActionId.CLEAR_TEMP_FILES:
             # Ignore any parameters provided; target root is strictly owned by backend
             return clear_temp_files()
+        if action_id == ActionId.DISABLE_STARTUP_APP:
+            startup_entry_id = str(parameters.get("startup_entry_id", ""))
+            return disable_startup_app(startup_entry_id)
         return self._fallback.execute(action_id, parameters)
+
