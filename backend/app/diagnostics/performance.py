@@ -11,6 +11,7 @@ import psutil
 from app.schemas.evidence import Evidence, EvidenceCategory, Severity
 
 
+from app.diagnostics.resource_hog import detect_resource_hogs
 from app.diagnostics.startup import get_startup_apps
 from app.executor.temp_cleaner import get_demo_temp_dir, measure_temp_dir
 
@@ -45,6 +46,8 @@ def diagnose_performance() -> list[Evidence]:
     active_count = startup_diag.get("enabled_count", 0)
 
     temp_bytes = _temp_usage_bytes()
+    resource_hog_evidence = detect_resource_hogs()
+
     evidence = [
         Evidence(
             category=EvidenceCategory.PERFORMANCE,
@@ -78,6 +81,7 @@ def diagnose_performance() -> list[Evidence]:
             source="psutil.process_iter",
             data={"processes": top_processes},
         ),
+        resource_hog_evidence,
         Evidence(
             category=EvidenceCategory.PERFORMANCE,
             severity=Severity.WARNING if active_count >= 10 or any(e.get("is_demo") for e in startup_entries) else Severity.INFO,

@@ -94,6 +94,10 @@ function normalizeEvidence(evidence = []) {
         "Evidence collected by WinFix.",
 
       status,
+
+      data: item.data || {},
+      kind: item.data?.kind,
+      top_resource_consumers: item.data?.top_resource_consumers || [],
     };
   });
 }
