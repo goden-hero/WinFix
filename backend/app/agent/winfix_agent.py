@@ -136,8 +136,19 @@ class DeterministicHarness:
                 causes.append(ProbableCause(title="Many startup applications", explanation="A high startup-entry count can increase sign-in and background load.", evidence_ids=[startup.id], confidence=0.7))
                 findings.append(Finding(title="Review startup load", description=startup.description, evidence_ids=[startup.id]))
         temp = by_title.get("Temporary file usage")
-        if temp and temp.data.get("bytes", 0) > 2 * 1024**3 and not recommendations:
-            recommendations.append(RecommendedAction(action_id=ActionId.CLEAR_TEMP_FILES, reason="Large temporary-file usage is a safe optimization candidate after approval.", evidence_ids=[temp.id]))
+        if temp and temp.data.get("bytes", 0) > 50 * 1024**2:
+            mb_size = temp.data.get("bytes", 0) / (1024**2)
+            causes.append(ProbableCause(
+                title="Temporary file accumulation",
+                explanation=f"Temporary storage has accumulated {mb_size:.1f} MB of junk files.",
+                evidence_ids=[temp.id],
+                confidence=0.85,
+            ))
+            recommendations.append(RecommendedAction(
+                action_id=ActionId.CLEAR_TEMP_FILES,
+                reason=f"Temporary storage can be reclaimed ({mb_size:.1f} MB) through an approved, bounded cleanup.",
+                evidence_ids=[temp.id],
+            ))
 
         if not causes:
             causes.append(ProbableCause(title="No single bottleneck identified", explanation="The current snapshot does not establish a definitive root cause. Further observation may be needed.", evidence_ids=[item.id for item in evidence[:4]], confidence=0.45))

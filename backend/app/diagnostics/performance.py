@@ -88,9 +88,9 @@ def diagnose_performance() -> list[Evidence]:
         ),
         Evidence(
             category=EvidenceCategory.OPTIMIZATION,
-            severity=Severity.WARNING if temp_bytes > 2 * 1024**3 else Severity.INFO,
+            severity=Severity.WARNING if temp_bytes > 50 * 1024**2 else Severity.INFO,
             title="Temporary file usage",
-            description="Size of files in the current user's temporary directory.",
+            description=f"Size of files in temporary storage ({temp_bytes / (1024**2):.1f} MB).",
             source="filesystem temp directory scan",
             data={"bytes": temp_bytes},
         ),
