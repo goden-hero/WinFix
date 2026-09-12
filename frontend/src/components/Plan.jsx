@@ -1,3 +1,5 @@
+import React from "react";
+
 const labels = {
   clear_temp_files: "Clear approved temporary files",
   disable_startup_app: "Disable startup application",
@@ -7,42 +9,64 @@ const labels = {
   run_dism_health_check: "Run DISM health check",
 };
 
-export function Plan({ actions, onApprove, busy }) {
+export function Plan({ actions = [], plan = [], onApprove, busy }) {
+  const items = actions.length > 0 ? actions : plan;
+
   return (
-    <section className="panel">
-      <h2>Remediation plan</h2>
-      {actions.length === 0 ? (
-        <p className="muted">No action is recommended from this snapshot. WinFix will not make a speculative change.</p>
+    <section className="panel card plan-card">
+      <div className="card-head">
+        <h3>📋 Recommended repair plan</h3>
+        <span className="card-count">{items.length} steps</span>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="muted" style={{ padding: "16px 0" }}>
+          No action is recommended from this snapshot. WinFix will not make a speculative change.
+        </p>
       ) : (
-        <div className="plan-list">
-          {actions.map((action) => {
-            const isStartup = action.action_id === "disable_startup_app";
+        <ol className="plan-list">
+          {items.map((action, i) => {
+            const actionId = action.action_id || action.id || "action";
+            const isStartup = actionId === "disable_startup_app";
             const appName = isStartup
               ? (action.parameters?.startup_entry_id ?? "").replace("hkcu_run:", "") || "Startup App"
               : null;
+            const title = action.text || (isStartup ? `Disable Startup Entry: ${appName}` : (labels[actionId] ?? actionId));
 
             return (
-              <article className="plan-item" key={action.action_id}>
-                <div>
-                  <span className="risk">Medium risk</span>
-                  <h3>
-                    {isStartup ? `Disable Startup Entry: ${appName}` : (labels[action.action_id] ?? action.action_id)}
-                  </h3>
+              <li key={actionId + i} className="plan-step plan-item">
+                <span className="plan-num">{i + 1}</span>
+                <div style={{ flex: 1 }}>
+                  <span className="risk severity warning">Medium risk</span>
+                  <span className="plan-text" style={{ display: "block", fontWeight: 700, margin: "4px 0" }}>{title}</span>
                   {isStartup && (
                     <small style={{ display: "block", color: "#4ee6b6", marginBottom: "6px" }}>
                       Currently: Enabled (HKCU Run)
                     </small>
                   )}
-                  <p>{action.reason}</p>
+                  <p className="muted" style={{ fontSize: "13px", margin: 0 }}>{action.reason || action.description}</p>
                 </div>
-                <button disabled={busy} onClick={() => onApprove(action.action_id)}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={busy}
+                  onClick={() => onApprove(actionId)}
+                >
                   Approve
                 </button>
-              </article>
+              </li>
             );
           })}
-        </div>
+        </ol>
       )}
+
+      <div className="plan-actions" style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid #26313c" }}>
+        <p className="plan-note muted" style={{ fontSize: "12px" }}>
+          WinFix will not modify your system until you approve each repair step.
+        </p>
+      </div>
     </section>
   );
 }
+
+export default Plan;
