@@ -11,43 +11,13 @@ import psutil
 from app.schemas.evidence import Evidence, EvidenceCategory, Severity
 
 
-def _startup_entries() -> list[dict[str, str]]:
-    """Return Windows Run-key values when available; degrade safely elsewhere."""
-    if platform.system() != "Windows":
-        return []
-    try:
-        import winreg  # type: ignore[attr-defined]
-
-        entries: list[dict[str, str]] = []
-        paths = [
-            (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run"),
-            (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Run"),
-        ]
-        for hive, path in paths:
-            try:
-                with winreg.OpenKey(hive, path) as key:
-                    index = 0
-                    while True:
-                        try:
-                            name, command, _ = winreg.EnumValue(key, index)
-                            entries.append({"name": name, "command": str(command), "source": path})
-                            index += 1
-                        except OSError:
-                            break
-            except OSError:
-                continue
-        return entries
-    except Exception:
-        return []
-
-
+from app.diagnostics.startup import get_startup_apps
 from app.executor.temp_cleaner import get_demo_temp_dir, measure_temp_dir
 
 
 def _temp_usage_bytes() -> int:
     bytes_count, _ = measure_temp_dir(get_demo_temp_dir())
     return bytes_count
-
 
 
 def diagnose_performance() -> list[Evidence]:
@@ -70,7 +40,9 @@ def diagnose_performance() -> list[Evidence]:
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     top_processes = sorted(processes, key=lambda item: (item["cpu_percent"], item["memory_percent"]), reverse=True)[:8]
-    startup_entries = _startup_entries()
+    startup_diag = get_startup_apps()
+    startup_entries = startup_diag.get("entries", [])
+    active_count = startup_diag.get("enabled_count", 0)
 
     temp_bytes = _temp_usage_bytes()
     evidence = [
@@ -108,11 +80,11 @@ def diagnose_performance() -> list[Evidence]:
         ),
         Evidence(
             category=EvidenceCategory.PERFORMANCE,
-            severity=Severity.WARNING if len(startup_entries) >= 10 else Severity.INFO,
+            severity=Severity.WARNING if active_count >= 10 or any(e.get("is_demo") for e in startup_entries) else Severity.INFO,
             title="Startup applications",
-            description=f"Found {len(startup_entries)} startup applications in supported Run keys.",
-            source="Windows Registry Run keys" if platform.system() == "Windows" else "unavailable outside Windows",
-            data={"count": len(startup_entries), "entries": startup_entries},
+            description=f"Found {active_count} active startup application{'s' if active_count != 1 else ''} in HKCU Run.",
+            source="Windows Registry HKCU Run" if platform.system() == "Windows" else "unavailable outside Windows",
+            data={"count": len(startup_entries), "enabled_count": active_count, "entries": startup_entries, "diagnostic": startup_diag},
         ),
         Evidence(
             category=EvidenceCategory.OPTIMIZATION,

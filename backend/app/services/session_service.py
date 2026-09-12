@@ -13,6 +13,9 @@ from app.schemas.verification import VerificationMetric, VerificationResult, Ver
 from app.storage.database import SessionStore
 
 
+from app.diagnostics.startup import get_startup_apps
+
+
 class SessionNotFoundError(KeyError):
     pass
 
@@ -120,6 +123,66 @@ class SessionService:
                             f"Independent verification confirmed {reclaimed_bytes} bytes reclaimed across {reclaimed_files} files."
                             if verification_status == VerificationStatus.VERIFIED
                             else "Verification failed: directory size did not decrease."
+                        ),
+                    )
+                )
+            elif result.action_id == ActionId.DISABLE_STARTUP_APP:
+                name = str(result.details.get("name", ""))
+                expected_command = str(result.details.get("command", ""))
+                enabled_before = int(result.details.get("enabled_entries_before", 0))
+                total_before = int(result.details.get("total_entries_before", 0))
+                unrelated_before = dict(result.details.get("unrelated_entries_before", {}))
+
+                # Independent fresh registry query
+                diag = get_startup_apps()
+                run_entries = {e["name"]: e["command"] for e in diag.get("entries", []) if e.get("enabled") is True}
+                disabled_entries = {e["name"]: e["command"] for e in diag.get("entries", []) if e.get("enabled") is False}
+
+                enabled_now = len(run_entries)
+                total_now = len(run_entries) + len(disabled_entries)
+
+                absent_from_run = (name not in run_entries)
+                exists_in_disabled = (name in disabled_entries)
+                command_matches = (disabled_entries.get(name) == expected_command)
+                unrelated_unchanged = all(run_entries.get(k) == v for k, v in unrelated_before.items())
+                count_decreased = (enabled_now == enabled_before - 1)
+
+                is_verified = (
+                    result.status == "success"
+                    and absent_from_run
+                    and exists_in_disabled
+                    and command_matches
+                    and unrelated_unchanged
+                    and count_decreased
+                )
+                v_status = VerificationStatus.VERIFIED if is_verified else VerificationStatus.FAILED
+
+                verification_results.append(
+                    VerificationResult(
+                        action_id=result.action_id,
+                        status=v_status,
+                        before={"active_entries": enabled_before, "total_entries": total_before, "targeted_entry": "ENABLED"},
+                        after={"active_entries": enabled_now, "total_entries": total_now, "targeted_entry": "DISABLED" if (absent_from_run and exists_in_disabled) else "ENABLED"},
+                        metrics=[
+                            VerificationMetric(
+                                name="Active startup entries",
+                                before=enabled_before,
+                                after=enabled_now,
+                                unit="entries",
+                                improved=enabled_now < enabled_before,
+                            ),
+                            VerificationMetric(
+                                name=f"Startup entry '{name}'",
+                                before=1,
+                                after=0 if absent_from_run else 1,
+                                unit="active",
+                                improved=absent_from_run and exists_in_disabled,
+                            ),
+                        ],
+                        summary=(
+                            f"Independent verification confirmed startup entry '{name}' was disabled in HKCU Run, backed up to RunDisabled, and unrelated entries remained unchanged."
+                            if is_verified
+                            else f"Verification failed: startup entry '{name}' remains active in HKCU Run or backup verification failed."
                         ),
                     )
                 )
