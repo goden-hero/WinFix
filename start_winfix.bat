@@ -2,72 +2,61 @@
 setlocal
 
 REM ============================================
-REM WinFix Agent - One Click Launcher
+REM WinFix Agent Launcher
 REM ============================================
 
-REM Get the directory where this BAT file lives
 set "ROOT=%~dp0"
 set "BACKEND=%ROOT%backend"
 set "FRONTEND=%ROOT%frontend"
 
-REM ============================================
+REM --------------------------------------------
 REM Request Administrator privileges
-REM ============================================
+REM --------------------------------------------
 
 net session >nul 2>&1
 
-if %errorLevel% neq 0 (
+if %errorlevel% neq 0 (
     echo Requesting Administrator privileges...
-
-    powershell -Command "Start-Process '%~f0' -Verb RunAs"
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
     exit /b
 )
 
-REM ============================================
-REM Start WinFix Backend
-REM ============================================
-
 echo.
 echo ============================================
-echo Starting WinFix Agent...
+echo Starting WinFix Agent
 echo ============================================
-echo.
 
-echo Starting backend on port 9000...
+REM --------------------------------------------
+REM Start Backend
+REM --------------------------------------------
 
-start "WinFix Backend" /min cmd /c ^
-"cd /d "%BACKEND%" && ".venv\Scripts\python.exe" -m uvicorn app.main:app --reload --port 9000"
+echo Starting backend...
 
-REM ============================================
+start "WinFix Backend" /min cmd /k "cd /d "%BACKEND%" && .venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 9000"
+
+REM Give backend a moment
+timeout /t 2 /nobreak >nul
+
+REM --------------------------------------------
 REM Start Frontend
-REM ============================================
+REM --------------------------------------------
 
 echo Starting frontend...
 
-start "WinFix Frontend" /min cmd /c ^
-"cd /d "%FRONTEND%" && npm run dev"
+start "WinFix Frontend" /min cmd /k "cd /d "%FRONTEND%" && npm run dev"
 
-REM ============================================
-REM Wait for services
-REM ============================================
-
-echo.
-echo Waiting for WinFix services to start...
+REM --------------------------------------------
+REM Wait for frontend
+REM --------------------------------------------
 
 timeout /t 5 /nobreak >nul
 
-REM ============================================
+REM --------------------------------------------
 REM Open WinFix in Edge App Mode
-REM ============================================
+REM --------------------------------------------
 
 echo Opening WinFix...
 
 start "" msedge.exe --app=http://127.0.0.1:5173
 
-echo.
-echo ============================================
-echo WinFix Agent launched successfully!
-echo ============================================
-
-endlocal
 exit
