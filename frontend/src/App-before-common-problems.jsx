@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { winfixApi } from "./api/client.js";
 import "./styles.css";
 
@@ -12,13 +12,11 @@ const ACTION_LABELS = {
   run_dism_health_check: "Run DISM health check",
 };
 const QUICK = [
-  ['slow','PC is very slow','My PC is running very slowly...','performance'],
-  ['chip','High Resource Usage','My PC is using too many system resources...','resource_hog'],
-  ['cube','Low disk space','I am running low on disk space...','storage'],
-  ['arrow','Slow startup','My PC takes too long to start...','startup'],
-  ['info','Check battery health','I want to check my battery health...','battery'],
-  ['arrow','Windows Update issue','Windows Update is not working correctly...','windows_update'],
-  ['settings','System errors','I am getting Windows system errors...','system_health'],
+  ["audio", "Audio", "My sound isn’t working..."],
+  ["wifi", "WiFi problem", "My WiFi keeps disconnecting..."],
+  ["slow", "PC slow", "My PC is running very slowly..."],
+  ["apps", "Apps not responding", "My apps keep freezing..."],
+  ["display", "Display problem", "My display has a problem..."],
 ];
 
 function Icon({ name, size = 24, stroke = 2 }) {
@@ -49,22 +47,7 @@ function Icon({ name, size = 24, stroke = 2 }) {
 function normalizeDiagnosis(d) {
   if (!d) return null;
   const causes = d.probable_causes ?? [];
-  const findings = d.findings ?? [];
-  const seen = new Set();
-  const problems = [...causes.map(c => ({ title: c.title, description: c.explanation, evidenceIds: c.evidence_ids ?? [] })), ...findings.map(f => ({ title: f.title, description: f.description, evidenceIds: f.evidence_ids ?? [] }))]
-    .filter(problem => {
-      const key = `${problem.title}:${problem.evidenceIds.join(",")}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  return {
-    severity: "Medium",
-    title: d.summary || "Windows system issue detected",
-    confidenceValue: Math.round((d.overall_confidence ?? 0) * 100),
-    explanation: d.summary || "WinFix analyzed the collected system evidence.",
-    problems,
-  };
+  return { severity: "Medium", title: d.summary || "Windows system issue detected", confidenceValue: Math.round((d.overall_confidence ?? 0) * 100), explanation: causes.length ? causes.map(c => `${c.title}: ${c.explanation}`).join(" ") : "WinFix analyzed the collected system evidence." };
 }
 function normalizeEvidence(items = []) {
   return items.map(i => {
@@ -101,13 +84,13 @@ export default function App() {
     setSaved(true); setTimeout(() => setSaved(false), 1800);
   };
 
-  const diagnose = useCallback(async (text, category) => {
+  const diagnose = useCallback(async (text) => {
     const value = (text ?? problem).trim(); if (!value || isWorking) return;
-    setError(null); setProblem(value); setSession(null); setDiagSteps([{ step: "Connecting to Windows machine...", status: "running" }]); setView("home"); setPhase(PHASE.DIAGNOSING);
+    setError(null); setProblem(value); setSession(null); setDiagSteps([{ step: "Connecting to Windows machine…", status: "running" }]); setView("home"); setPhase(PHASE.DIAGNOSING);
     try {
       const created = await winfixApi.createSession(value);
       setDiagSteps([{ step: "Connected to Windows machine", status: "done" }, { step: "Checking system information", status: "done" }, { step: "Inspecting Windows services", status: "running" }]);
-      const diagnosed = await winfixApi.diagnose(created.session_id, category ? [category] : undefined);
+      const diagnosed = await winfixApi.diagnose(created.session_id);
       setDiagSteps([{ step: "Connected to Windows machine", status: "done" }, { step: "Checking system information", status: "done" }, { step: "Inspecting Windows services", status: "done" }, { step: "Analyzing possible causes", status: "done" }, { step: "Diagnosis complete", status: "done" }]);
       setSession(diagnosed); setPhase(PHASE.DIAGNOSIS);
     } catch (e) { setError(e.message || "Diagnosis failed"); setPhase(PHASE.IDLE); }
@@ -126,73 +109,40 @@ export default function App() {
 
   const title = useMemo(() => phase === PHASE.IDLE ? "home" : phase, [phase]);
 
-  return (
-    <div className="winfix-viewport">
-      <div className="winfix-app">
-        <div className={`app phase-${title}`}>
-          <div className="orb orb-a"/><div className="orb orb-b"/><div className="orb orb-c"/><div className="orb orb-d"/>
-          <header className="topbar">
-            <div className="brand"><div className="brand-mark"><img src="/winfix-header-mark.png" alt="WinFix" /></div><div className="brand-divider"/><div><div className="brand-name">WinFix</div><div className="brand-tag">AI powered windows system diagnostics</div></div></div>
-            <div className="topbar-right"><div className="connected"><span className="connected-dot"/>connected</div><div className="window-controls"><span>&mdash;</span><span>&#9633;</span><span>&times;</span></div></div>
-          </header>
+  return <div className={`app phase-${title}`}>
+    <div className="orb orb-a"/><div className="orb orb-b"/><div className="orb orb-c"/><div className="orb orb-d"/>
+    <header className="topbar">
+      <div className="brand"><div className="brand-mark"><img src="/winfix-header-mark.png" alt="WinFix" /></div><div className="brand-divider"/><div><div className="brand-name">WinFix</div><div className="brand-tag">AI powered windows system diagnostics</div></div></div>
+      <div className="topbar-right"><div className="connected"><span className="connected-dot"/>connected</div><div className="window-controls"><span>—</span><span>□</span><span>×</span></div></div>
+    </header>
 
-          <div className="shell">
-            <aside className="sidebar">
-              <button className={`settings-tile ${view === "settings" ? "active" : ""}`} onClick={() => { setView("settings"); setPhase(PHASE.IDLE); }}><Icon name="settings" size={33}/><span><b>Settings</b><small>API, GPU and model preferences</small></span><Icon name="arrow" size={22}/></button>
-              <div className="side-heading">Common Problems</div>
-              <nav className="issue-list">{QUICK.map(([id,label,text,category], i) => <button key={id} className={`issue ${i === 0 ? "active" : ""}`} onClick={() => diagnose(text, category)}><Icon name={id} size={29}/><span>{label}</span></button>)}</nav>
-              <div className="sidebar-quote"><br/><br/><div/></div>
-            </aside>
+    <div className="shell">
+      <aside className="sidebar">
+        <button className={`settings-tile ${view === "settings" ? "active" : ""}`} onClick={() => { setView("settings"); setPhase(PHASE.IDLE); }}><Icon name="settings" size={33}/><span><b>Settings</b><small>API, GPU and model preferences</small></span><Icon name="arrow" size={22}/></button>
+        <div className="side-heading">Common Problems</div>
+        <nav className="issue-list">{QUICK.map(([id,label,text], i) => <button key={id} className={`issue ${i === 0 ? "active" : ""}`} onClick={() => diagnose(text)}><Icon name={id} size={29}/><span>{label}</span></button>)}</nav>
+        <div className="sidebar-quote"><br/><br/><div/></div>
+      </aside>
 
-            <main className="content">
-              {error && <div className="error-banner"><span>&#9888;  {error}</span><button onClick={() => setError(null)}>&times;</button></div>}
-              {view === "settings" && <Settings prefs={prefs} setPrefs={setPrefs} onBack={() => setView("home")} onSave={savePrefs} saved={saved}/>} 
-              {view === "home" && phase === PHASE.IDLE && <Home problem={problem} setProblem={setProblem} diagnose={diagnose}/>} 
-              {view === "home" && phase === PHASE.DIAGNOSING && <Diagnosing steps={diagSteps} problem={problem}/>} 
-              {view === "home" && phase === PHASE.DIAGNOSIS && diagnosis && <Diagnosis diagnosis={diagnosis} evidence={evidence} plan={plan} onApprove={() => setShowApproval(true)} onReset={reset}/>} 
-              {view === "home" && phase === PHASE.REPAIRING && <Repair status={session?.status} steps={repairSteps(session?.status)} execute={execute} verify={verify}/>} 
-              {view === "home" && phase === PHASE.VERIFIED && <Verified onReset={reset}/>} 
-            </main>
-          </div>
-
-          {showApproval && <Approval plan={plan} onCancel={() => setShowApproval(false)} onConfirm={approve}/>} 
-        </div>
-      </div>
+      <main className="content">
+        {error && <div className="error-banner"><span>⚠ {error}</span><button onClick={() => setError(null)}>×</button></div>}
+        {view === "settings" && <Settings prefs={prefs} setPrefs={setPrefs} onBack={() => setView("home")} onSave={savePrefs} saved={saved}/>} 
+        {view === "home" && phase === PHASE.IDLE && <Home problem={problem} setProblem={setProblem} diagnose={diagnose}/>} 
+        {view === "home" && phase === PHASE.DIAGNOSING && <Diagnosing steps={diagSteps} problem={problem}/>} 
+        {view === "home" && phase === PHASE.DIAGNOSIS && diagnosis && <Diagnosis diagnosis={diagnosis} evidence={evidence} plan={plan} onApprove={() => setShowApproval(true)} onReset={reset}/>} 
+        {view === "home" && phase === PHASE.REPAIRING && <Repair status={session?.status} steps={repairSteps(session?.status)} execute={execute} verify={verify}/>} 
+        {view === "home" && phase === PHASE.VERIFIED && <Verified onReset={reset}/>} 
+      </main>
     </div>
-  );
+
+    {showApproval && <Approval plan={plan} onCancel={() => setShowApproval(false)} onConfirm={approve}/>} 
+  </div>;
 }
 
-function Home({ problem, setProblem, diagnose }) { return <section className="home-page"><div className="home-copy"><h1>What can we fix <span>today?</span></h1><p>Describe your problem and WinFix will find the right solution</p></div><form className="home-form" onSubmit={e => { e.preventDefault(); diagnose(problem); }}><div className="input-wrap"><Icon name="message" size={31}/><textarea value={problem} onChange={e => setProblem(e.target.value)} placeholder="My sound isn't working..." aria-label="Describe your Windows problem" /></div><button className="primary-cta" disabled={!problem.trim()}><Icon name="search" size={30}/><b>Diagnose Problem</b><Icon name="arrow" size={31}/></button></form></section>; }
-function Diagnosing({ steps }) { return <section className="state-page diagnosing"><div className="state-title"><h1>Diagnosing<span>...</span></h1><p>WinFix is analysing your system. This may take a few moments.</p></div><div className="diagnose-layout"><div className="windows-ring"><div>&#9638;</div></div><div className="activity">{steps.map((s,i)=><div className={`activity-row ${s.status}`} key={i}><span>{s.status === "done" ? "\u2713" : s.status === "running" ? "" : "\u25CB"}</span>{s.step}</div>)}</div></div><div className="tip"><Icon name="sparkle" size={22}/><span><b>Tip</b><small>You can continue using your PC while WinFix diagnoses the issue.</small></span></div></section>; }
-function Diagnosis({ diagnosis, plan, onApprove }) {
-  const hasActions = plan.length > 0;
-  return <section className="state-page result-page">
-    <div className="back-line"><Icon name="back" size={25}/> Back to Home</div>
-    <h1>Problems <span>Detected</span></h1>
-    <p className="lead">WinFix found the following independent diagnostic results.</p>
-    <div className="result-grid">
-      <div className="solution-card">
-        <div className="solution-top">
-          <div className="round-icon"><Icon name="audio" size={31}/></div>
-          <div className="solution-title"><h2>{diagnosis.title}</h2><p>{diagnosis.explanation}</p></div>
-          <span className="severity">&#9888; {diagnosis.severity}</span>
-        </div>
-        <div className="divider"/>
-        <h3>Problems Detected</h3>
-        <ol className="repair-list">
-          {diagnosis.problems.map((problem, i) => <li key={`${problem.title}-${i}`}><span>{i + 1}</span><div><b>{problem.title}</b><small>{problem.description}</small></div></li>)}
-        </ol>
-        <div className="divider"/>
-        {hasActions ? <><h3>Recommended Fixes</h3><ol className="repair-list">{plan.map((p, i) => <li key={p.action_id || i}><span>{i + 1}</span><div><b>{p.text}</b><small>{p.reason || "WinFix will safely apply this recommended remediation."}</small></div></li>)}</ol><div className="result-actions"><button className="primary-cta compact" onClick={onApprove}><span>&#9654;</span><b>Apply Approved Fixes</b><small>Let WinFix handle the selected repairs</small></button></div></> : <div className="solution-title"><h3>User Attention Recommended</h3><p>Some findings, including high resource usage, have no safe automated repair. Review the affected applications or system settings.</p></div>}
-      </div>
-      <aside className="insight-card"><Icon name="sparkle" size={31}/><h3>AI Insight</h3><p>{diagnosis.explanation}</p></aside>
-    </div>
-  </section>;
-}
-function Repair({ status, steps, execute, verify }) { return <section className="state-page repair-page"><div className="back-line"><Icon name="back" size={25}/> Back to Home</div><h1>Applying <span>Fix...</span></h1><p className="lead">WinFix is now applying the selected repair plan.</p><div className="repair-card">{steps.map((s,i)=><div className={`repair-row ${s.status}`} key={i}><span className="repair-status">{s.status === "done" ? "\u2713" : s.status === "running" ? "" : i+1}</span><div><b>{s.step}</b><small>{s.detail || (s.status === "pending" ? "Pending" : "Completed")}</small></div><em>{s.status === "done" ? "Completed" : s.status === "running" ? "In progress..." : "Pending"}</em></div>)}</div>{status === "approved" && <button className="primary-cta" onClick={execute}>&#128295; Execute Approved Repair <Icon name="arrow" size={27}/></button>}{status === "verifying" && <button className="primary-cta" onClick={verify}>&#10003; Verify System <Icon name="arrow" size={27}/></button>}</section>; }
+function Home({ problem, setProblem, diagnose }) { return <section className="home-page"><div className="home-copy"><h1>What can we fix <span>today?</span></h1><p>Describe your problem and WinFix will find the right solution</p></div><form className="home-form" onSubmit={e => { e.preventDefault(); diagnose(problem); }}><div className="input-wrap"><Icon name="message" size={31}/><textarea value={problem} onChange={e => setProblem(e.target.value)} placeholder="My sound isn’t working..." aria-label="Describe your Windows problem" /></div><button className="primary-cta" disabled={!problem.trim()}><Icon name="search" size={30}/><b>Diagnose Problem</b><Icon name="arrow" size={31}/></button></form></section>; }
+function Diagnosing({ steps }) { return <section className="state-page diagnosing"><div className="state-title"><h1>Diagnosing<span>...</span></h1><p>WinFix is analysing your system. This may take a few moments.</p></div><div className="diagnose-layout"><div className="windows-ring"><div>▦</div></div><div className="activity">{steps.map((s,i)=><div className={`activity-row ${s.status}`} key={i}><span>{s.status === "done" ? "✓" : s.status === "running" ? "" : "○"}</span>{s.step}</div>)}</div></div><div className="tip"><Icon name="sparkle" size={22}/><span><b>Tip</b><small>You can continue using your PC while WinFix diagnoses the issue.</small></span></div></section>; }
+function Diagnosis({ diagnosis, evidence, plan, onApprove }) { return <section className="state-page result-page"><div className="back-line"><Icon name="back" size={25}/> Back to Home</div><h1>Solution <span>Found</span></h1><p className="lead">We’ve analysed your issue and found the best solution.</p><div className="result-grid"><div className="solution-card"><div className="solution-top"><div className="round-icon"><Icon name="audio" size={31}/></div><div className="solution-title"><h2>{diagnosis.title}</h2><p>{diagnosis.explanation}</p></div><span className="severity">⚠ {diagnosis.severity}</span></div><div className="divider"/><h3>Recommended Fix</h3><ol className="repair-list">{plan.slice(0,4).map((p,i)=><li key={p.action_id || i}><span>{i+1}</span><div><b>{p.text}</b><small>{p.reason || "WinFix will safely apply this recommended remediation."}</small></div></li>)}</ol><div className="result-actions"><button className="primary-cta compact" onClick={onApprove}><span>▶</span><b>Apply Fix</b><small>Let WinFix handle it for you</small></button><button className="secondary-cta"><span>☷</span> View Details</button></div></div><aside className="insight-card"><Icon name="sparkle" size={31}/><h3>AI Insight</h3><p>{diagnosis.explanation || "This issue was identified from system evidence collected during diagnosis."}</p></aside></div></section>; }
+function Repair({ status, steps, execute, verify }) { return <section className="state-page repair-page"><div className="back-line"><Icon name="back" size={25}/> Back to Home</div><h1>Applying <span>Fix...</span></h1><p className="lead">WinFix is now applying the selected repair plan.</p><div className="repair-card">{steps.map((s,i)=><div className={`repair-row ${s.status}`} key={i}><span className="repair-status">{s.status === "done" ? "✓" : s.status === "running" ? "" : i+1}</span><div><b>{s.step}</b><small>{s.detail || (s.status === "pending" ? "Pending" : "Completed")}</small></div><em>{s.status === "done" ? "Completed" : s.status === "running" ? "In progress..." : "Pending"}</em></div>)}</div>{status === "approved" && <button className="primary-cta" onClick={execute}>🔧 Execute Approved Repair <Icon name="arrow" size={27}/></button>}{status === "verifying" && <button className="primary-cta" onClick={verify}>✓ Verify System <Icon name="arrow" size={27}/></button>}</section>; }
 function Verified({ onReset }) { return <section className="state-page verified-page"><div className="success-ring"><Icon name="check" size={56}/></div><h1>Fix <span>Successful</span></h1><p>The issue has been resolved and your system is working properly.</p><button className="primary-cta" onClick={onReset}>Diagnose Another Problem <Icon name="arrow" size={27}/></button></section>; }
-function Approval({ plan, onCancel, onConfirm }) { return <div className="modal-backdrop"><div className="approval-modal"><h2>Ready to repair the system?</h2><p>These changes will be made to your Windows machine:</p><ul>{plan.map((p,i)=><li key={i}>&#10003; {p.text}</li>)}</ul><div><button className="secondary-cta" onClick={onCancel}>Cancel</button><button className="primary-cta" onClick={onConfirm}>Approve Fix <Icon name="arrow" size={22}/></button></div></div></div>; }
+function Approval({ plan, onCancel, onConfirm }) { return <div className="modal-backdrop"><div className="approval-modal"><h2>Ready to repair the system?</h2><p>These changes will be made to your Windows machine:</p><ul>{plan.map((p,i)=><li key={i}>✓ {p.text}</li>)}</ul><div><button className="secondary-cta" onClick={onCancel}>Cancel</button><button className="primary-cta" onClick={onConfirm}>Approve Fix <Icon name="arrow" size={22}/></button></div></div></div>; }
 function Settings({ prefs, setPrefs, onBack, onSave, saved }) { return <section className="settings-page"><div className="settings-head"><div><button className="back-link" onClick={onBack}><Icon name="back" size={24}/> Back to Home</button><h1>Settings</h1><p>Configure your AI, GPU and model preferences</p></div><div className="personalise"><Icon name="settings" size={32}/><span><b>Personalise WinFix</b><small>Set your preferences for a better experience</small></span></div></div><div className="setting-card api-card"><div className="setting-title"><Icon name="link" size={34}/><span><b>API Configuration</b><small>Connect your preferred API provider</small></span></div><div className="api-row"><select value={prefs.provider} onChange={e => setPrefs({...prefs, provider:e.target.value})}><option>OpenAI</option><option>Local API</option><option>Custom Provider</option></select><div className="key-wrap"><input type="password" placeholder="Enter your API key" value={prefs.apiKey} onChange={e => setPrefs({...prefs, apiKey:e.target.value})}/><Icon name="eyeoff" size={22}/></div><button className="test-btn" onClick={() => setPrefs({...prefs})}>Test Connection</button></div><div className="privacy-note"><Icon name="info" size={16}/> Your API key is stored locally and never shared.</div></div><div className="setting-card model-card"><div className="setting-title"><Icon name="cube" size={34}/><span><b>Model Preferences</b><small>Choose the model you want to run</small></span></div><div className="model-grid"><select value={prefs.model} onChange={e => setPrefs({...prefs, model:e.target.value})}><option>GPT-4o</option><option>GPT-4.1</option><option>Local model</option></select><div className="model-info"><b>{prefs.model}</b><p>Best balance of speed, accuracy and reasoning.</p><span>General Use</span><span>Fast</span><span>Reliable</span></div></div></div><div className="setting-card gpu-card"><div className="setting-title"><Icon name="chip" size={34}/><span><b>GPU Acceleration (Optional)</b><small>Enable GPU acceleration for faster local processing</small></span><button className={`toggle ${prefs.gpuEnabled ? "on" : ""}`} onClick={() => setPrefs({...prefs, gpuEnabled:!prefs.gpuEnabled})}><i/></button></div><div className="gpu-grid"><select value={prefs.gpu} onChange={e => setPrefs({...prefs, gpu:e.target.value})}><option>NVIDIA GeForce RTX 4060</option><option>Auto-detect</option><option>CPU only</option></select><div className="gpu-note"><Icon name="info" size={24}/><span>GPU acceleration can speed up local model inference and system analysis.</span></div></div></div><div className="save-row"><button className="primary-cta save" onClick={onSave}><Icon name="save" size={24}/><b>{saved ? "Preferences Saved" : "Save Preferences"}</b><Icon name="arrow" size={24}/></button></div></section>; }
-
-
-
